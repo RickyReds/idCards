@@ -5,6 +5,42 @@ Tutte le modifiche significative a questo progetto verranno documentate in quest
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto aderisce a [Semantic Versioning](https://semver.org/lang/it/).
 
+## [1.4.1] - 2024-11-16
+
+### Fixed
+- **Canvas A4 ora centrato correttamente**: Risolto problema margine alto clippato
+  - Cambiato `align-items` da `flex-start` a `center` nel container
+  - Aumentato padding verticale da 20px a 30px
+  - Modificato max-height da fisso 800px a `calc(100vh - 200px)` dinamico
+  - Aggiunto min-height 600px per consistenza
+  - Risolto conflitto CSS tra `.canvas-container` principale e manual editor
+
+### Added
+- **Preservazione DPI automatica**: Sistema completo per mantenere dimensioni originali delle scansioni
+  - Estrazione automatica DPI da file PNG (chunk pHYs) e JPEG (JFIF APP0)
+  - DPI predefinito 300 se non trovati nei metadati
+  - Log console mostra DPI estratti: `📷 Immagine: 2480×658px @ 300DPI`
+- **Export PDF con dimensioni reali**: PDF esportati mantengono dimensioni fisiche corrette
+  - Calcolo automatico mm da pixel basato su DPI: `(pixel / DPI) × 25.4`
+  - Log mostra conversione: `📄 Export PDF: 2480×658px @ 300DPI → 209.5×55.6mm`
+  - Centratura automatica su pagina A4
+  - Ridimensionamento solo se necessario per stare in A4
+
+### Changed
+- Propagazione DPI attraverso tutte le operazioni: detection, trim, rotation, enhance
+- `imageProcessor.extractDPI()`: Legge metadati PNG/JPEG per trovare DPI
+- `documentDetector.cropDocument()`: Preserva DPI sul canvas croppato
+- `imageProcessor.rotateCanvas()`: Mantiene DPI dopo rotazione
+- `manualEditor.createDocument()`: Preserva DPI in selezioni manuali
+- `exporter.exportAsPDF()`: Usa DPI per calcolare dimensioni reali
+- Tutti i canvas ora hanno proprietà `.dpi` accessibile
+
+### Technical Details
+- PNG DPI: Lettura da chunk pHYs (pixels per meter → DPI)
+- JPEG DPI: Lettura da JFIF APP0 marker (units 1=DPI, 2=DPC)
+- Formula conversione: `mm = (pixels / DPI) × 25.4`
+- DPI propagati in: loadImage → detectDocuments → cropDocument → autoAlign → enhance → export
+
 ## [1.4.0] - 2024-11-16
 
 ### Added

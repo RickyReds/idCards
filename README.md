@@ -62,7 +62,7 @@ Il debug tool permette di visualizzare in tempo reale come diversi parametri inf
 
 ## 📌 Versioning
 
-**Versione Corrente: 1.4.0** (2024-11-16)
+**Versione Corrente: 1.4.1** (2024-11-16)
 
 La versione è visibile nel footer dell'applicazione web. Ogni versione segue il formato [Semantic Versioning](https://semver.org/lang/it/) (MAJOR.MINOR.PATCH).
 
@@ -75,6 +75,7 @@ La versione è visibile nel footer dell'applicazione web. Ogni versione segue il
 Vedi [CHANGELOG.md](CHANGELOG.md) per la cronologia completa delle modifiche.
 
 **Ultimi aggiornamenti:**
+- **v1.4.1**: Preservazione DPI automatica + canvas centrato + export PDF con dimensioni reali
 - **v1.4.0**: Editor manuale interattivo per selezione e cropping manuale + workflow ibrido auto/manuale
 - **v1.3.5**: Fix crash algoritmo adattivo + fallback permissivo
 - **v1.3.4**: Algoritmo trim adattivo auto-ottimizzante + debug tool interattivo

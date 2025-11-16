@@ -308,12 +308,13 @@ section h2 {
     position: relative;
     background: var(--bg-color);
     border-radius: 8px;
-    padding: 20px;
+    padding: 30px 20px;
     overflow: auto;
-    max-height: 800px;
+    max-height: calc(100vh - 200px);
+    min-height: 600px;
     display: flex;
     justify-content: center;
-    align-items: flex-start;
+    align-items: center;
 }
 
 .canvas-wrapper {
@@ -604,7 +605,7 @@ section h2 {
     flex: 1;
 }
 
-.canvas-container {
+.manual-editor-body .canvas-container {
     background: #f8f9fa;
     border: 2px solid #dee2e6;
     border-radius: 8px;

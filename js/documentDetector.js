@@ -303,13 +303,18 @@ class DocumentDetector {
         this.documentCounter++;
         const docId = `doc_${this.documentCounter}_${Date.now()}`;
 
-        console.log(`  📄 Documento creato: ID=${docId}, dimensioni=${trimmedBounds.width}x${trimmedBounds.height}`);
+        // Preserva DPI dall'immagine originale
+        const dpi = originalImage.dpi || 300;
+        croppedCanvas.dpi = dpi;
+
+        console.log(`  📄 Documento creato: ID=${docId}, dimensioni=${trimmedBounds.width}x${trimmedBounds.height}, DPI=${dpi}`);
 
         return {
             id: docId,
             canvas: croppedCanvas,
             bounds: trimmedBounds,
-            originalImage: originalImage
+            originalImage: originalImage,
+            dpi: dpi
         };
     }
 

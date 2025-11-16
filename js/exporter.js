@@ -4,6 +4,17 @@
 class Exporter {
     constructor() {
         // jsPDF sarà caricato da CDN
+        this.defaultDPI = 300;
+    }
+
+    /**
+     * Calcola dimensioni reali in mm da pixel e DPI
+     * @param {number} pixels - Dimensione in pixel
+     * @param {number} dpi - DPI dell'immagine
+     * @returns {number} Dimensione in mm
+     */
+    pixelsToMM(pixels, dpi = 300) {
+        return (pixels / dpi) * 25.4; // inches to mm
     }
 
     /**
@@ -14,9 +25,33 @@ class Exporter {
     async exportAsPDF(canvas, filename = 'documento_identita.pdf') {
         const { jsPDF } = window.jspdf;
 
-        // Crea PDF in formato A4 (210 x 297 mm)
+        // Leggi DPI dal canvas (se disponibili)
+        const dpi = canvas.dpi || this.defaultDPI;
+
+        // Calcola dimensioni reali in mm basandosi sui DPI
+        const widthMM = this.pixelsToMM(canvas.width, dpi);
+        const heightMM = this.pixelsToMM(canvas.height, dpi);
+
+        console.log(`📄 Export PDF: ${canvas.width}×${canvas.height}px @ ${dpi}DPI → ${widthMM.toFixed(1)}×${heightMM.toFixed(1)}mm`);
+
+        // Determina orientamento
+        const isLandscape = widthMM > heightMM;
+
+        // Crea PDF con dimensioni basate sulle dimensioni reali del canvas
+        // Se il documento è più grande di A4, usa A4 come massimo
+        const maxA4Width = isLandscape ? 297 : 210;
+        const maxA4Height = isLandscape ? 210 : 297;
+
+        // Calcola se serve ridimensionare per stare in A4
+        const scaleWidth = widthMM > maxA4Width ? maxA4Width / widthMM : 1;
+        const scaleHeight = heightMM > maxA4Height ? maxA4Height / heightMM : 1;
+        const scale = Math.min(scaleWidth, scaleHeight, 1);
+
+        const finalWidthMM = widthMM * scale;
+        const finalHeightMM = heightMM * scale;
+
         const pdf = new jsPDF({
-            orientation: 'portrait',
+            orientation: isLandscape ? 'landscape' : 'portrait',
             unit: 'mm',
             format: 'a4'
         });
@@ -24,8 +59,18 @@ class Exporter {
         // Converti canvas in immagine
         const imgData = canvas.toDataURL('image/jpeg', 0.95);
 
-        // Aggiungi immagine al PDF (copre tutta la pagina A4)
-        pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+        // Centra l'immagine sulla pagina A4
+        const x = (maxA4Width - finalWidthMM) / 2;
+        const y = (maxA4Height - finalHeightMM) / 2;
+
+        // Aggiungi immagine con dimensioni corrette
+        pdf.addImage(imgData, 'JPEG', x, y, finalWidthMM, finalHeightMM);
+
+        if (scale < 1) {
+            console.log(`⚠️ Documento ridimensionato a ${(scale * 100).toFixed(1)}% per stare in A4`);
+        } else {
+            console.log(`✅ Documento esportato a dimensioni originali`);
+        }
 
         // Salva
         pdf.save(filename);

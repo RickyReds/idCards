@@ -4,7 +4,7 @@
  */
 
 // Versione applicazione
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.4.1';
 const APP_BUILD_DATE = '2024-11-16';
 
 // Stato globale

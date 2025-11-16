@@ -6,20 +6,29 @@ class ImageProcessor {
     constructor() {
         this.canvas = document.createElement('canvas');
         this.ctx = this.canvas.getContext('2d');
+        this.defaultDPI = 300; // DPI predefinito per scansioni di qualità
     }
 
     /**
-     * Carica un file immagine
+     * Carica un file immagine e estrae i DPI
      * @param {File} file - File da caricare
      * @returns {Promise<HTMLImageElement>}
      */
     async loadImage(file) {
+        // Estrai DPI dal file
+        const dpi = await this.extractDPI(file);
+
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
 
             reader.onload = (e) => {
                 const img = new Image();
-                img.onload = () => resolve(img);
+                img.onload = () => {
+                    // Salva DPI sull'immagine
+                    img.dpi = dpi;
+                    console.log(`📷 Immagine: ${img.width}×${img.height}px @ ${dpi}DPI`);
+                    resolve(img);
+                };
                 img.onerror = reject;
                 img.src = e.target.result;
             };
@@ -27,6 +36,128 @@ class ImageProcessor {
             reader.onerror = reject;
             reader.readAsDataURL(file);
         });
+    }
+
+    /**
+     * Estrae i DPI da un file immagine
+     * @param {File} file - File immagine
+     * @returns {Promise<number>} DPI trovati o default (300)
+     */
+    async extractDPI(file) {
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const view = new DataView(arrayBuffer);
+
+            let dpi = null;
+
+            // Estrai da PNG
+            if (file.type === 'image/png') {
+                dpi = this.extractPNGDPI(view);
+            }
+            // Estrai da JPEG
+            else if (file.type === 'image/jpeg' || file.type === 'image/jpg') {
+                dpi = this.extractJPEGDPI(view);
+            }
+
+            if (dpi && dpi > 0) {
+                console.log(`  📐 DPI estratti: ${dpi}`);
+                return dpi;
+            }
+
+            console.log(`  📐 DPI non trovati, uso default: ${this.defaultDPI}`);
+            return this.defaultDPI;
+        } catch (e) {
+            console.warn(`  ⚠️ Errore estrazione DPI:`, e);
+            return this.defaultDPI;
+        }
+    }
+
+    /**
+     * Estrae DPI da PNG (chunk pHYs)
+     */
+    extractPNGDPI(view) {
+        try {
+            // PNG signature: 89 50 4E 47 0D 0A 1A 0A
+            if (view.getUint32(0) !== 0x89504E47) return null;
+
+            let offset = 8;
+            while (offset < view.byteLength - 12) {
+                const length = view.getUint32(offset);
+                const type = String.fromCharCode(
+                    view.getUint8(offset + 4),
+                    view.getUint8(offset + 5),
+                    view.getUint8(offset + 6),
+                    view.getUint8(offset + 7)
+                );
+
+                if (type === 'pHYs') {
+                    const pixelsPerUnitX = view.getUint32(offset + 8);
+                    const unit = view.getUint8(offset + 16);
+
+                    // unit = 1 significa pixels per meter
+                    if (unit === 1 && pixelsPerUnitX > 0) {
+                        const dpi = Math.round(pixelsPerUnitX / 39.3701); // meters to inches
+                        return dpi;
+                    }
+                }
+
+                offset += 12 + length;
+            }
+        } catch (e) {
+            // Ignora errori
+        }
+        return null;
+    }
+
+    /**
+     * Estrae DPI da JPEG (JFIF APP0)
+     */
+    extractJPEGDPI(view) {
+        try {
+            // JPEG signature: FF D8
+            if (view.getUint16(0) !== 0xFFD8) return null;
+
+            let offset = 2;
+            while (offset < view.byteLength - 14) {
+                const marker = view.getUint16(offset);
+
+                // APP0 marker (JFIF)
+                if (marker === 0xFFE0) {
+                    const length = view.getUint16(offset + 2);
+
+                    // Verifica JFIF identifier
+                    const isJFIF =
+                        view.getUint8(offset + 4) === 0x4A && // J
+                        view.getUint8(offset + 5) === 0x46 && // F
+                        view.getUint8(offset + 6) === 0x49 && // I
+                        view.getUint8(offset + 7) === 0x46;   // F
+
+                    if (isJFIF) {
+                        const units = view.getUint8(offset + 11);
+                        const densityX = view.getUint16(offset + 12);
+
+                        // units: 0=no units, 1=dots per inch, 2=dots per cm
+                        if (units === 1 && densityX > 0) {
+                            return densityX;
+                        } else if (units === 2 && densityX > 0) {
+                            return Math.round(densityX * 2.54); // cm to inches
+                        }
+                    }
+                    break;
+                }
+
+                offset += 2;
+                if (marker >= 0xFFD0 && marker <= 0xFFD9) {
+                    // Standalone marker (no length)
+                    continue;
+                }
+                const length = view.getUint16(offset);
+                offset += length;
+            }
+        } catch (e) {
+            // Ignora errori
+        }
+        return null;
     }
 
     /**
@@ -319,6 +450,11 @@ class ImageProcessor {
         rotatedCanvas.width = newWidth;
         rotatedCanvas.height = newHeight;
         const ctx = rotatedCanvas.getContext('2d');
+
+        // Preserva DPI dal canvas originale
+        if (sourceCanvas.dpi) {
+            rotatedCanvas.dpi = sourceCanvas.dpi;
+        }
 
         // Sfondo bianco
         ctx.fillStyle = '#ffffff';

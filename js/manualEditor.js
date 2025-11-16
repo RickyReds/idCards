@@ -338,13 +338,18 @@ class ManualEditor {
         this.documentCounter++;
         const docId = `manual_${this.documentCounter}_${Date.now()}`;
 
+        // Preserva DPI dall'immagine originale
+        const dpi = this.image.dpi || 300;
+        canvas.dpi = dpi;
+
         return {
             id: docId,
             canvas: canvas,
             bounds: { x: box.x, y: box.y, width: box.width, height: box.height },
             rotation: box.rotation,
             originalImage: this.image,
-            source: 'manual'
+            source: 'manual',
+            dpi: dpi
         };
     }
 
