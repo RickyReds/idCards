@@ -5,6 +5,18 @@ Tutte le modifiche significative a questo progetto verranno documentate in quest
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto aderisce a [Semantic Versioning](https://semver.org/lang/it/).
 
+## [1.3.5] - 2024-11-16
+
+### Fixed
+- **Risolto crash "Reduce of empty array"**: Fix errore quando tutti i threshold dell'algoritmo adattivo vengono scartati dalla validazione
+  - Aggiunto fallback permissivo con validazione disabilitata quando nessun threshold produce risultati validi
+  - Se il fallback fallisce, ritorna bounds originali senza trim invece di crashare
+  - Aggiunto valore iniziale al reduce per sicurezza
+  - Il metodo `findTrimBounds()` ora accetta parametro opzionale `skipValidation` per disabilitare validazione area ratio
+
+### Changed
+- Log migliorato mostra quando viene usato il fallback permissivo
+
 ## [1.3.4] - 2024-11-16
 
 ### Added

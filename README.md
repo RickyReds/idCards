@@ -48,7 +48,7 @@ Il debug tool permette di visualizzare in tempo reale come diversi parametri inf
 
 ## 📌 Versioning
 
-**Versione Corrente: 1.3.4** (2024-11-16)
+**Versione Corrente: 1.3.5** (2024-11-16)
 
 La versione è visibile nel footer dell'applicazione web. Ogni versione segue il formato [Semantic Versioning](https://semver.org/lang/it/) (MAJOR.MINOR.PATCH).
 
@@ -61,6 +61,7 @@ La versione è visibile nel footer dell'applicazione web. Ogni versione segue il
 Vedi [CHANGELOG.md](CHANGELOG.md) per la cronologia completa delle modifiche.
 
 **Ultimi aggiornamenti:**
+- **v1.3.5**: Fix crash algoritmo adattivo + fallback permissivo
 - **v1.3.4**: Algoritmo trim adattivo auto-ottimizzante + debug tool interattivo
 - **v1.3.3**: Trim ancora più aggressivo + riutilizzo documenti dopo cancellazione
 - **v1.3.2**: Trim whitespace più aggressivo + sistema single-use per documenti

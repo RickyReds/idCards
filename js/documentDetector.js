@@ -342,10 +342,34 @@ class DocumentDetector {
             }
         }
 
+        // Se nessun threshold ha prodotto risultati validi, usa fallback più permissivo
+        if (results.length === 0) {
+            console.log(`  ⚠️ Nessun threshold valido, uso fallback permissivo`);
+            const bounds = this.findTrimBounds(data, width, height, 250, 0.01, true); // Validazione disabilitata
+            if (bounds) {
+                results.push({
+                    threshold: 250,
+                    ...bounds,
+                    score: 0
+                });
+            }
+        }
+
+        // Se ancora nessun risultato, ritorna bounds originali (nessun trim)
+        if (results.length === 0) {
+            console.log(`  ⚠️ Impossibile trimmare, ritorno bounds originali`);
+            return {
+                x: x,
+                y: y,
+                width: width,
+                height: height
+            };
+        }
+
         // Scegli il risultato con score migliore (rimuove più spazio senza essere troppo aggressivo)
         let bestResult = results.reduce((best, curr) =>
             curr.score > best.score ? curr : best
-        );
+        , results[0]);
 
         console.log(`  Trim adattivo: threshold=${bestResult.threshold}, score=${bestResult.score.toFixed(2)}`);
         console.log(`  Trim: ${width}x${height} → ${bestResult.width}x${bestResult.height} (rimosso: T=${bestResult.removedTop}, B=${bestResult.removedBottom}, L=${bestResult.removedLeft}, R=${bestResult.removedRight})`);
@@ -360,8 +384,9 @@ class DocumentDetector {
 
     /**
      * Trova i bounds del trim con parametri specifici
+     * @param {boolean} skipValidation - Se true, salta la validazione area ratio
      */
-    findTrimBounds(data, width, height, whiteThreshold, minPixelsThreshold) {
+    findTrimBounds(data, width, height, whiteThreshold, minPixelsThreshold, skipValidation = false) {
         let top = 0, bottom = height - 1;
         let left = 0, right = width - 1;
 
@@ -425,13 +450,15 @@ class DocumentDetector {
         const trimmedHeight = bottom - top + 1;
 
         // Valida che il trim sia sensato (non rimuove tutto o quasi nulla)
-        const trimmedArea = trimmedWidth * trimmedHeight;
-        const originalArea = width * height;
-        const areaRatio = trimmedArea / originalArea;
+        if (!skipValidation) {
+            const trimmedArea = trimmedWidth * trimmedHeight;
+            const originalArea = width * height;
+            const areaRatio = trimmedArea / originalArea;
 
-        if (areaRatio < 0.3 || areaRatio > 0.99) {
-            // Trim troppo aggressivo o troppo conservativo
-            return null;
+            if (areaRatio < 0.3 || areaRatio > 0.99) {
+                // Trim troppo aggressivo o troppo conservativo
+                return null;
+            }
         }
 
         return {
