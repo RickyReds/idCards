@@ -9,6 +9,7 @@
     --primary-color: #3b82f6;
     --primary-dark: #2563eb;
     --secondary-color: #10b981;
+    --success-color: #10b981;
     --danger-color: #ef4444;
     --bg-color: #f8fafc;
     --card-bg: #ffffff;
@@ -162,6 +163,35 @@ section h2 {
     border-color: var(--primary-color);
     box-shadow: var(--shadow-md);
     transform: translateY(-2px);
+}
+
+/* Documento già usato */
+.document-item.used {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.document-item.used::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 3rem;
+    color: var(--success-color);
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+    pointer-events: none;
+}
+
+/* Effetto flash quando si prova a usare un documento già usato */
+@keyframes flash-warning {
+    0%, 100% { background-color: white; }
+    50% { background-color: #ffe6e6; border-color: #ff4444; }
+}
+
+.document-item.already-used-flash {
+    animation: flash-warning 0.6s ease-in-out;
 }
 
 .document-item img {

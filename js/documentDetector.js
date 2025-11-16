@@ -330,8 +330,8 @@ class DocumentDetector {
         let top = 0, bottom = height - 1;
         let left = 0, right = width - 1;
 
-        // Soglia più sensibile per catturare meglio i bordi (era 240)
-        const whiteThreshold = 245;
+        // Soglia più sensibile per catturare meglio i bordi
+        const whiteThreshold = 250; // Aumentato da 245 per essere più aggressivo
 
         // Conta pixel non bianchi per riga/colonna (più robusto)
         const countNonWhitePixels = (startRow, endRow, startCol, endCol) => {
@@ -346,8 +346,8 @@ class DocumentDetector {
             return count;
         };
 
-        // Soglia: almeno 5% della riga/colonna deve essere non-bianco
-        const minPixelsThreshold = 0.05;
+        // Soglia ridotta: almeno 2% della riga/colonna deve essere non-bianco (era 5%)
+        const minPixelsThreshold = 0.02;
 
         // Trova top
         for (let row = 0; row < height; row++) {
@@ -386,7 +386,7 @@ class DocumentDetector {
         }
 
         // Margine minimo per sicurezza
-        const margin = 2;
+        const margin = 1;
         top = Math.max(0, top - margin);
         left = Math.max(0, left - margin);
         bottom = Math.min(height - 1, bottom + margin);
@@ -395,7 +395,12 @@ class DocumentDetector {
         const trimmedWidth = right - left + 1;
         const trimmedHeight = bottom - top + 1;
 
-        console.log(`  Trim: ${width}x${height} → ${trimmedWidth}x${trimmedHeight} (removed: top=${top}, left=${left})`);
+        const removedTop = top;
+        const removedBottom = height - 1 - bottom;
+        const removedLeft = left;
+        const removedRight = width - 1 - right;
+
+        console.log(`  Trim: ${width}x${height} → ${trimmedWidth}x${trimmedHeight} (rimosso: T=${removedTop}, B=${removedBottom}, L=${removedLeft}, R=${removedRight})`);
 
         return {
             x: x + left,

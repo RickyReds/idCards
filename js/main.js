@@ -4,7 +4,7 @@
  */
 
 // Versione applicazione
-const APP_VERSION = '1.3.1';
+const APP_VERSION = '1.3.2';
 const APP_BUILD_DATE = '2024-11-16';
 
 // Stato globale
@@ -14,6 +14,7 @@ const app = {
     canvasManager: null,
     exporter: null,
     documents: [], // Documenti rilevati
+    usedDocuments: new Set(), // IDs dei documenti già aggiunti al canvas
     loadingOverlay: null,
     version: APP_VERSION
 };
@@ -303,8 +304,35 @@ function addDocumentToGrid(doc) {
 /**
  * Aggiunge un documento al canvas A4
  */
-function addDocumentToCanvas(doc) {
-    app.canvasManager.addDocument(doc.canvas);
+function addDocumentToCanvas(doc, position = null) {
+    // Verifica se il documento è già stato usato
+    if (app.usedDocuments.has(doc.id)) {
+        console.log(`⚠️ Documento ${doc.id} già aggiunto al canvas`);
+        // Mostra feedback visivo (opzionale)
+        const docElement = document.querySelector(`[data-doc-id="${doc.id}"]`);
+        if (docElement) {
+            docElement.classList.add('already-used-flash');
+            setTimeout(() => docElement.classList.remove('already-used-flash'), 600);
+        }
+        return;
+    }
+
+    // Aggiungi al canvas
+    if (position) {
+        app.canvasManager.addDocument(doc.canvas, position);
+    } else {
+        app.canvasManager.addDocument(doc.canvas);
+    }
+
+    // Marca come usato
+    app.usedDocuments.add(doc.id);
+
+    // Aggiorna UI del documento nella griglia
+    const docElement = document.querySelector(`[data-doc-id="${doc.id}"]`);
+    if (docElement) {
+        docElement.classList.add('used');
+        docElement.title = 'Documento già aggiunto al canvas';
+    }
 
     // Nascondi la guida se è il primo documento
     const guide = document.querySelector('.canvas-guide');
@@ -369,13 +397,8 @@ canvasContainer.addEventListener('drop', (e) => {
         const x = (e.clientX - canvasRect.left) * scaleX;
         const y = (e.clientY - canvasRect.top) * scaleY;
 
-        app.canvasManager.addDocument(doc.canvas, {x, y});
-
-        // Nascondi guida
-        const guide = document.querySelector('.canvas-guide');
-        if (guide) {
-            guide.style.display = 'none';
-        }
+        // Usa la funzione addDocumentToCanvas che gestisce il single-use
+        addDocumentToCanvas(doc, {x, y});
     }
 });
 

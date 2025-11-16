@@ -5,6 +5,26 @@ Tutte le modifiche significative a questo progetto verranno documentate in quest
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto aderisce a [Semantic Versioning](https://semver.org/lang/it/).
 
+## [1.3.2] - 2024-11-16
+
+### Fixed
+- **Trim whitespace più aggressivo**: Migliorato algoritmo di ritaglio margini
+  - Threshold bianco aumentato da 245 a 250 per rilevare meglio i bordi
+  - Soglia percentuale ridotta dal 5% al 2% per essere più aggressivo
+  - Margine ridotto da 2px a 1px
+  - Log migliorato mostra quantità esatta di pixel rimossi per lato (T/B/L/R)
+
+### Added
+- **Sistema single-use per documenti**: Ogni documento può essere aggiunto al canvas una sola volta
+  - Stato globale `usedDocuments` traccia i documenti già aggiunti
+  - Feedback visivo: documenti usati mostrano checkmark verde e sono semi-trasparenti
+  - Effetto flash rosso se si prova ad aggiungere un documento già usato
+  - Funziona sia con click che drag-and-drop
+  - Previene duplicazione accidentale di documenti sul canvas
+
+### Changed
+- Log di trim ora mostra esattamente quanti pixel vengono rimossi da ogni lato
+
 ## [1.3.1] - 2024-11-16
 
 ### Fixed
