@@ -5,6 +5,34 @@ Tutte le modifiche significative a questo progetto verranno documentate in quest
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto aderisce a [Semantic Versioning](https://semver.org/lang/it/).
 
+## [1.3.4] - 2024-11-16
+
+### Added
+- **Debug Tool Interattivo**: Nuovo file `debug-trim.html` per testare e ottimizzare parametri di trim
+  - Interfaccia visuale per caricare immagini e vedere risultati in tempo reale
+  - 4 preset predefiniti: Corrente, Aggressivo, Moderato, Gentile
+  - Controlli slider per regolare White Threshold, Min Pixels %, e Margin
+  - Visualizzazione side-by-side di fronte e retro prima/dopo trim
+  - Statistiche dettagliate: dimensioni, pixel rimossi, aspect ratio
+- **Documentazione Debug**: File `DEBUG-TRIM-INSTRUCTIONS.md` con istruzioni complete per uso del tool
+
+### Changed
+- **Algoritmo Trim Adattivo**: Sistema intelligente di auto-ottimizzazione
+  - Prova automaticamente 3 threshold diversi (248, 250, 252)
+  - Calcola score per ogni risultato basato su area rimossa e aspect ratio
+  - Sceglie automaticamente il threshold migliore per ogni documento
+  - MinPixelsThreshold ridotto da 1% a 0.5% per maggiore aggressività
+  - Validazione automatica: scarta trim troppo aggressivi (< 30% area) o conservativi (> 99% area)
+- **Nuovi metodi DocumentDetector**:
+  - `findTrimBounds()`: Calcola bounds con parametri specifici
+  - `scoreTrimResult()`: Assegna score di qualità al trim
+  - Log migliorato mostra threshold scelto e score
+
+### Technical Details
+- Il trim adattivo considera aspect ratio standard carte ID (1.586:1)
+- Penalizza aspect ratio anomali per evitare trim eccessivi
+- Migliore gestione differenze tra fronte e retro
+
 ## [1.3.3] - 2024-11-16
 
 ### Fixed

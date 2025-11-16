@@ -314,7 +314,7 @@ class DocumentDetector {
     }
 
     /**
-     * Rimuove spazi bianchi attorno a una regione
+     * Rimuove spazi bianchi attorno a una regione - Versione adattiva
      */
     trimWhitespace(image, x, y, width, height) {
         // Crea un canvas temporaneo per analizzare la regione
@@ -327,13 +327,45 @@ class DocumentDetector {
         const imageData = tempCtx.getImageData(0, 0, width, height);
         const data = imageData.data;
 
+        // Prova diversi threshold e scegli il migliore
+        const thresholds = [248, 250, 252]; // Da più aggressivo a più conservativo
+        const results = [];
+
+        for (const whiteThreshold of thresholds) {
+            const bounds = this.findTrimBounds(data, width, height, whiteThreshold, 0.005);
+            if (bounds) {
+                results.push({
+                    threshold: whiteThreshold,
+                    ...bounds,
+                    score: this.scoreTrimResult(bounds, width, height)
+                });
+            }
+        }
+
+        // Scegli il risultato con score migliore (rimuove più spazio senza essere troppo aggressivo)
+        let bestResult = results.reduce((best, curr) =>
+            curr.score > best.score ? curr : best
+        );
+
+        console.log(`  Trim adattivo: threshold=${bestResult.threshold}, score=${bestResult.score.toFixed(2)}`);
+        console.log(`  Trim: ${width}x${height} → ${bestResult.width}x${bestResult.height} (rimosso: T=${bestResult.removedTop}, B=${bestResult.removedBottom}, L=${bestResult.removedLeft}, R=${bestResult.removedRight})`);
+
+        return {
+            x: x + bestResult.left,
+            y: y + bestResult.top,
+            width: bestResult.width,
+            height: bestResult.height
+        };
+    }
+
+    /**
+     * Trova i bounds del trim con parametri specifici
+     */
+    findTrimBounds(data, width, height, whiteThreshold, minPixelsThreshold) {
         let top = 0, bottom = height - 1;
         let left = 0, right = width - 1;
 
-        // Soglia più sensibile per catturare meglio i bordi
-        const whiteThreshold = 252; // Aumentato da 250 per essere ancora più aggressivo
-
-        // Conta pixel non bianchi per riga/colonna (più robusto)
+        // Conta pixel non bianchi per riga/colonna
         const countNonWhitePixels = (startRow, endRow, startCol, endCol) => {
             let count = 0;
             for (let row = startRow; row <= endRow; row++) {
@@ -345,9 +377,6 @@ class DocumentDetector {
             }
             return count;
         };
-
-        // Soglia ridotta: almeno 1% della riga/colonna deve essere non-bianco (era 2%)
-        const minPixelsThreshold = 0.01;
 
         // Trova top
         for (let row = 0; row < height; row++) {
@@ -395,19 +424,53 @@ class DocumentDetector {
         const trimmedWidth = right - left + 1;
         const trimmedHeight = bottom - top + 1;
 
-        const removedTop = top;
-        const removedBottom = height - 1 - bottom;
-        const removedLeft = left;
-        const removedRight = width - 1 - right;
+        // Valida che il trim sia sensato (non rimuove tutto o quasi nulla)
+        const trimmedArea = trimmedWidth * trimmedHeight;
+        const originalArea = width * height;
+        const areaRatio = trimmedArea / originalArea;
 
-        console.log(`  Trim: ${width}x${height} → ${trimmedWidth}x${trimmedHeight} (rimosso: T=${removedTop}, B=${removedBottom}, L=${removedLeft}, R=${removedRight})`);
+        if (areaRatio < 0.3 || areaRatio > 0.99) {
+            // Trim troppo aggressivo o troppo conservativo
+            return null;
+        }
 
         return {
-            x: x + left,
-            y: y + top,
+            top,
+            bottom,
+            left,
+            right,
             width: trimmedWidth,
-            height: trimmedHeight
+            height: trimmedHeight,
+            removedTop: top,
+            removedBottom: height - 1 - bottom,
+            removedLeft: left,
+            removedRight: width - 1 - right
         };
+    }
+
+    /**
+     * Assegna uno score al risultato del trim
+     * Score più alto = migliore (rimuove più spazio bianco)
+     */
+    scoreTrimResult(bounds, originalWidth, originalHeight) {
+        const originalArea = originalWidth * originalHeight;
+        const trimmedArea = bounds.width * bounds.height;
+        const removedArea = originalArea - trimmedArea;
+
+        // Preferisce rimuovere più spazio, ma penalizza trim troppo aggressivi
+        const removalRatio = removedArea / originalArea;
+
+        // Score basato su: quanto viene rimosso (buono) vs. quanto rimane (deve essere sostanziale)
+        const areaScore = removalRatio * 100;
+
+        // Penalizza se l'aspect ratio è troppo strano
+        const aspectRatio = bounds.width / bounds.height;
+        const expectedAspectRatio = 1.586; // Carta ID standard
+        const aspectDiff = Math.abs(aspectRatio - expectedAspectRatio) +
+                          Math.abs((1/aspectRatio) - expectedAspectRatio);
+        const aspectPenalty = aspectDiff * 5;
+
+        return areaScore - aspectPenalty;
     }
 
     /**
