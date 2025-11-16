@@ -123,7 +123,7 @@ function handleFileSelect(e) {
  * Processa i file caricati
  */
 async function processFiles(files) {
-    showLoading(true);
+    showLoading(true, 'Caricamento e rilevamento documenti...');
 
     try {
         for (const file of files) {
@@ -163,12 +163,24 @@ async function processFile(file) {
     }
 
     // Processa ogni documento rilevato
-    for (const doc of detectedDocs) {
+    console.log(`Rilevati ${detectedDocs.length} documento/i`);
+    showLoading(true, `Rilevati ${detectedDocs.length} documento/i. Elaborazione...`);
+
+    for (let i = 0; i < detectedDocs.length; i++) {
+        const doc = detectedDocs[i];
+
+        showLoading(true, `Elaborazione documento ${i + 1}/${detectedDocs.length}: allineamento...`);
+        console.log(`Processando documento ${i + 1}/${detectedDocs.length}...`);
+
         // Auto-allinea (correggi rotazione)
         const alignedCanvas = app.processor.autoAlign(doc.canvas);
+        console.log(`  ✓ Allineamento completato`);
+
+        showLoading(true, `Elaborazione documento ${i + 1}/${detectedDocs.length}: ottimizzazione...`);
 
         // Ottimizza qualità
         const enhancedCanvas = app.processor.enhance(alignedCanvas);
+        console.log(`  ✓ Ottimizzazione completata`);
 
         // Aggiungi alla lista documenti
         const processedDoc = {
@@ -181,9 +193,11 @@ async function processFile(file) {
 
         // Aggiungi alla UI
         addDocumentToGrid(processedDoc);
+        console.log(`  ✓ Documento ${i + 1} pronto all'uso`);
     }
 
     updateDocumentsGrid();
+    console.log('Tutti i documenti sono stati processati e sono pronti all\'uso');
 }
 
 /**
@@ -314,12 +328,13 @@ canvasContainer.addEventListener('drop', (e) => {
     const doc = app.documents.find(d => d.id === docId);
 
     if (doc) {
-        const rect = canvasContainer.getBoundingClientRect();
         const canvasRect = app.canvasManager.canvas.getBoundingClientRect();
 
-        // Calcola posizione relativa sul canvas
-        const x = (e.clientX - canvasRect.left) / app.canvasManager.zoom;
-        const y = (e.clientY - canvasRect.top) / app.canvasManager.zoom;
+        // Calcola posizione relativa sul canvas tenendo conto del display scale
+        const scaleX = app.canvasManager.canvas.width / canvasRect.width;
+        const scaleY = app.canvasManager.canvas.height / canvasRect.height;
+        const x = (e.clientX - canvasRect.left) * scaleX;
+        const y = (e.clientY - canvasRect.top) * scaleY;
 
         app.canvasManager.addDocument(doc.canvas, {x, y});
 
@@ -364,9 +379,13 @@ async function handleExport() {
 /**
  * Mostra/nascondi loading overlay
  */
-function showLoading(show) {
+function showLoading(show, message = 'Elaborazione in corso...') {
     if (show) {
         app.loadingOverlay.classList.add('active');
+        const loadingText = app.loadingOverlay.querySelector('p');
+        if (loadingText) {
+            loadingText.textContent = message;
+        }
     } else {
         app.loadingOverlay.classList.remove('active');
     }

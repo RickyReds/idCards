@@ -276,6 +276,14 @@ section h2 {
     padding: 20px;
     overflow: auto;
     max-height: 800px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+.canvas-wrapper {
+    position: relative;
+    display: inline-block;
 }
 
 .canvas-guide {
@@ -287,11 +295,11 @@ section h2 {
     font-size: 0.875rem;
     pointer-events: none;
     opacity: 0.5;
+    z-index: 1;
 }
 
 #a4Canvas {
     display: block;
-    margin: 0 auto;
     background: white;
     box-shadow: var(--shadow-lg);
     cursor: default;

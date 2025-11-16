@@ -5,6 +5,7 @@ class CanvasManager {
     constructor(canvasElement) {
         this.canvas = canvasElement;
         this.ctx = canvasElement.getContext('2d');
+        this.wrapper = document.getElementById('canvasWrapper');
         this.objects = []; // Array di oggetti posizionati sul canvas
         this.selectedObject = null;
         this.isDragging = false;
@@ -12,9 +13,12 @@ class CanvasManager {
         this.dragStart = {x: 0, y: 0};
         this.zoom = 1;
 
-        // Dimensioni A4 in pixel (300 DPI)
+        // Dimensioni A4 in pixel (300 DPI per export)
         this.A4_WIDTH = 2480;  // 210mm a 300 DPI
         this.A4_HEIGHT = 3508; // 297mm a 300 DPI
+
+        // Display scale per mostrare a dimensioni ragionevoli
+        this.DISPLAY_SCALE = 0.25; // 25% delle dimensioni reali
 
         this.initCanvas();
         this.setupEventListeners();
@@ -26,6 +30,11 @@ class CanvasManager {
     initCanvas() {
         this.canvas.width = this.A4_WIDTH;
         this.canvas.height = this.A4_HEIGHT;
+
+        // Applica display scale
+        this.canvas.style.width = `${this.A4_WIDTH * this.DISPLAY_SCALE}px`;
+        this.canvas.style.height = `${this.A4_HEIGHT * this.DISPLAY_SCALE}px`;
+
         this.clear();
     }
 
@@ -94,8 +103,10 @@ class CanvasManager {
      */
     onMouseDown(e) {
         const rect = this.canvas.getBoundingClientRect();
-        const x = (e.clientX - rect.left) / this.zoom;
-        const y = (e.clientY - rect.top) / this.zoom;
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
 
         // Trova oggetto sotto il cursore
         const clickedObject = this.getObjectAt(x, y);
@@ -124,8 +135,10 @@ class CanvasManager {
         if (!this.isDragging || !this.selectedObject) return;
 
         const rect = this.canvas.getBoundingClientRect();
-        const x = (e.clientX - rect.left) / this.zoom;
-        const y = (e.clientY - rect.top) / this.zoom;
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
 
         // Aggiorna posizione
         this.selectedObject.x = x - this.dragStart.x;
@@ -289,8 +302,10 @@ class CanvasManager {
      */
     setZoom(zoomLevel) {
         this.zoom = zoomLevel;
-        this.canvas.style.transform = `scale(${zoomLevel})`;
-        this.canvas.style.transformOrigin = 'top left';
+        if (this.wrapper) {
+            this.wrapper.style.transform = `scale(${zoomLevel})`;
+            this.wrapper.style.transformOrigin = 'top center';
+        }
     }
 
     /**
