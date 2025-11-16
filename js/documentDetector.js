@@ -6,6 +6,7 @@ class DocumentDetector {
     constructor() {
         this.canvas = document.createElement('canvas');
         this.ctx = this.canvas.getContext('2d');
+        this.documentCounter = 0; // Counter per ID univoci
     }
 
     /**
@@ -98,6 +99,13 @@ class DocumentDetector {
                 documents.push(this.cropDocument(originalImage, 0, splitY, width, height - splitY, 1));
             } else {
                 console.log(`  ✗ Split scartato (aspect ratios non validi: ${topAspect.toFixed(2)}, ${bottomAspect.toFixed(2)})`);
+                console.log(`  → Tratto come documento singolo`);
+                // Gap invalido, tratta come documento singolo
+                const bounds = this.findContentBounds(rowBrightness, colBrightness, threshold, width, height);
+                if (bounds) {
+                    console.log(`  Documento singolo: ${bounds.x}, ${bounds.y}, ${bounds.width}x${bounds.height}`);
+                    documents.push(this.cropDocument(originalImage, bounds.x, bounds.y, bounds.width, bounds.height, 0));
+                }
             }
         }
         // Se trova un gap significativo verticale, split orizzontale
@@ -120,6 +128,13 @@ class DocumentDetector {
                 documents.push(this.cropDocument(originalImage, splitX, 0, width - splitX, height, 1));
             } else {
                 console.log(`  ✗ Split scartato (aspect ratios non validi: ${leftAspect.toFixed(2)}, ${rightAspect.toFixed(2)})`);
+                console.log(`  → Tratto come documento singolo`);
+                // Gap invalido, tratta come documento singolo
+                const bounds = this.findContentBounds(rowBrightness, colBrightness, threshold, width, height);
+                if (bounds) {
+                    console.log(`  Documento singolo: ${bounds.x}, ${bounds.y}, ${bounds.width}x${bounds.height}`);
+                    documents.push(this.cropDocument(originalImage, bounds.x, bounds.y, bounds.width, bounds.height, 0));
+                }
             }
         }
         // Nessun gap chiaro, probabilmente un solo documento
@@ -268,8 +283,14 @@ class DocumentDetector {
             0, 0, trimmedBounds.width, trimmedBounds.height
         );
 
+        // ID univoco usando counter incrementale
+        this.documentCounter++;
+        const docId = `doc_${this.documentCounter}_${Date.now()}`;
+
+        console.log(`  📄 Documento creato: ID=${docId}, dimensioni=${trimmedBounds.width}x${trimmedBounds.height}`);
+
         return {
-            id: `doc_${Date.now()}_${index}`,
+            id: docId,
             canvas: croppedCanvas,
             bounds: trimmedBounds,
             originalImage: originalImage
@@ -363,7 +384,7 @@ class DocumentDetector {
         const documents = [];
         const halfHeight = Math.floor(image.height / 2);
 
-        console.log('Split in 2 parti uguali (orizzontale)');
+        console.log('⚠️ Fallback: Split in 2 parti uguali (orizzontale)');
 
         for (let i = 0; i < 2; i++) {
             const canvas = document.createElement('canvas');
@@ -375,8 +396,14 @@ class DocumentDetector {
             const sy = i * halfHeight;
             ctx.drawImage(image, 0, sy, image.width, halfHeight, 0, 0, image.width, halfHeight);
 
+            // ID univoco
+            this.documentCounter++;
+            const docId = `doc_${this.documentCounter}_${Date.now()}`;
+
+            console.log(`  📄 Parte ${i + 1}/2: ID=${docId}, dimensioni=${canvas.width}x${canvas.height}`);
+
             documents.push({
-                id: `doc_${Date.now()}_${i}`,
+                id: docId,
                 canvas: canvas,
                 bounds: {x: 0, y: sy, width: image.width, height: halfHeight},
                 originalImage: image

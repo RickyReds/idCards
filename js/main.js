@@ -123,10 +123,16 @@ function handleFileSelect(e) {
  * Processa i file caricati
  */
 async function processFiles(files) {
+    console.log(`\n========================================`);
+    console.log(`📁 Inizio processing di ${files.length} file`);
+    console.log(`========================================`);
+
     showLoading(true, 'Caricamento e rilevamento documenti...');
 
     try {
-        for (const file of files) {
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            console.log(`\n--- FILE ${i + 1}/${files.length}: ${file.name} ---`);
             await processFile(file);
         }
     } catch (error) {
@@ -134,6 +140,9 @@ async function processFiles(files) {
         alert(`Errore: ${error.message}`);
     } finally {
         showLoading(false);
+        console.log(`\n========================================`);
+        console.log(`✅ Processing completato: ${app.documents.length} documenti totali`);
+        console.log(`========================================\n`);
     }
 }
 
