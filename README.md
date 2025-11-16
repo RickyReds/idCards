@@ -127,6 +127,14 @@ Esempio log:
 - Usa regressione lineare per ogni bordo
 - Calcola mediana invece di media (robusto contro outlier)
 
+### ❌ Problema: Rotazione proposta per documenti già orientati correttamente
+**Causa**: L'algoritmo `autoAlign()` proponeva di ruotare documenti già in formato landscape (orizzontale) con aspect ratio corretto
+**Soluzione**:
+- Verifica aspect ratio PRIMA di applicare rotazione
+- Se documento è landscape (width > height) CON aspect ratio corretto (~1.586 ±50%) E angolo < 3°, NON ruota
+- Previene rotazioni inutili su carte già orientate correttamente
+- Log migliorato per mostrare aspect ratio e orientamento rilevato
+
 ## 📝 Note Tecniche
 
 - **Aspect Ratio Carte**: Le carte d'identità standard hanno proporzioni simili alle carte di credito (85.60mm × 53.98mm = 1.586)

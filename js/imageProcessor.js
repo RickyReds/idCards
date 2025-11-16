@@ -344,8 +344,30 @@ class ImageProcessor {
     autoAlign(canvas) {
         console.log('🔄 Inizio auto-allineamento...');
 
+        // Calcola aspect ratio del documento
+        const aspectRatio = canvas.width / canvas.height;
+        const EXPECTED_ASPECT_RATIO = 1.586; // Carta ID standard (85.6mm x 53.98mm)
+        const TOLERANCE = 0.5; // ±50%
+
+        // Verifica se il documento è già in orientamento landscape corretto
+        const isLandscape = canvas.width > canvas.height;
+        const hasCorrectAspectRatio = (
+            (aspectRatio >= EXPECTED_ASPECT_RATIO * (1 - TOLERANCE) &&
+             aspectRatio <= EXPECTED_ASPECT_RATIO * (1 + TOLERANCE)) ||
+            (1/aspectRatio >= EXPECTED_ASPECT_RATIO * (1 - TOLERANCE) &&
+             1/aspectRatio <= EXPECTED_ASPECT_RATIO * (1 + TOLERANCE))
+        );
+
+        console.log(`  📐 Aspect ratio: ${aspectRatio.toFixed(2)} (landscape: ${isLandscape}, corretto: ${hasCorrectAspectRatio})`);
+
         // Usa metodo veloce basato su edge detection
         const angle = this.detectRotationFast(canvas);
+
+        // Se documento è landscape con aspect ratio corretto e angolo piccolo, NON ruotare
+        if (isLandscape && hasCorrectAspectRatio && Math.abs(angle) < 3) {
+            console.log('✅ Documento già orientato correttamente (landscape, aspect ratio ok, angolo <3°)');
+            return canvas;
+        }
 
         if (Math.abs(angle) < 0.3) {
             console.log('✅ Documento già allineato (angolo <0.3°)');
