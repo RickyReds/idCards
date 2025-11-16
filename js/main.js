@@ -4,7 +4,7 @@
  */
 
 // Versione applicazione
-const APP_VERSION = '1.3.2';
+const APP_VERSION = '1.3.3';
 const APP_BUILD_DATE = '2024-11-16';
 
 // Stato globale
@@ -104,6 +104,12 @@ function setupEventListeners() {
 
     // Export button
     document.getElementById('btnExport').addEventListener('click', handleExport);
+
+    // Listener per riabilitare documenti quando vengono cancellati dal canvas
+    document.addEventListener('documentRemoved', (e) => {
+        const documentId = e.detail.documentId;
+        reenableDocument(documentId);
+    });
 }
 
 /**
@@ -317,12 +323,9 @@ function addDocumentToCanvas(doc, position = null) {
         return;
     }
 
-    // Aggiungi al canvas
-    if (position) {
-        app.canvasManager.addDocument(doc.canvas, position);
-    } else {
-        app.canvasManager.addDocument(doc.canvas);
-    }
+    // Aggiungi al canvas con documentId per tracking
+    const options = position ? { ...position, documentId: doc.id } : { documentId: doc.id };
+    app.canvasManager.addDocument(doc.canvas, options);
 
     // Marca come usato
     app.usedDocuments.add(doc.id);
@@ -342,11 +345,30 @@ function addDocumentToCanvas(doc, position = null) {
 }
 
 /**
- * Rimuove un documento
+ * Riabilita un documento quando viene rimosso dal canvas
+ */
+function reenableDocument(docId) {
+    // Rimuovi dal set dei documenti usati
+    app.usedDocuments.delete(docId);
+
+    // Rimuovi classe 'used' dall'UI
+    const docElement = document.querySelector(`[data-doc-id="${docId}"]`);
+    if (docElement) {
+        docElement.classList.remove('used');
+        docElement.title = '';
+        console.log(`♻️ Documento ${docId} riabilitato e riutilizzabile`);
+    }
+}
+
+/**
+ * Rimuove un documento dalla lista (eliminazione permanente)
  */
 function removeDocument(docId) {
     // Rimuovi dalla lista
     app.documents = app.documents.filter(d => d.id !== docId);
+
+    // Rimuovi dal set usedDocuments se presente
+    app.usedDocuments.delete(docId);
 
     // Rimuovi dalla UI
     const element = document.querySelector(`[data-doc-id="${docId}"]`);

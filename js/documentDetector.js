@@ -331,7 +331,7 @@ class DocumentDetector {
         let left = 0, right = width - 1;
 
         // Soglia più sensibile per catturare meglio i bordi
-        const whiteThreshold = 250; // Aumentato da 245 per essere più aggressivo
+        const whiteThreshold = 252; // Aumentato da 250 per essere ancora più aggressivo
 
         // Conta pixel non bianchi per riga/colonna (più robusto)
         const countNonWhitePixels = (startRow, endRow, startCol, endCol) => {
@@ -346,8 +346,8 @@ class DocumentDetector {
             return count;
         };
 
-        // Soglia ridotta: almeno 2% della riga/colonna deve essere non-bianco (era 5%)
-        const minPixelsThreshold = 0.02;
+        // Soglia ridotta: almeno 1% della riga/colonna deve essere non-bianco (era 2%)
+        const minPixelsThreshold = 0.01;
 
         // Trova top
         for (let row = 0; row < height; row++) {

@@ -5,6 +5,27 @@ Tutte le modifiche significative a questo progetto verranno documentate in quest
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto aderisce a [Semantic Versioning](https://semver.org/lang/it/).
 
+## [1.3.3] - 2024-11-16
+
+### Fixed
+- **Trim whitespace ancora più aggressivo**: Ulteriore miglioramento algoritmo di ritaglio margini
+  - Threshold bianco aumentato da 250 a 252
+  - Soglia percentuale ridotta dall'2% all'1%
+  - Risolve problema del fronte non croppato correttamente
+
+### Added
+- **Riutilizzo documenti dopo cancellazione**: I documenti possono essere riutilizzati dopo essere stati cancellati dal canvas
+  - Quando si elimina un documento dal canvas (tasto Canc/Backspace), la spunta verde sparisce
+  - Il documento torna cliccabile e draggabile
+  - Implementato sistema CustomEvent per notifica rimozione
+  - Aggiunto campo `documentId` agli oggetti canvas per tracking
+  - Funzione `reenableDocument()` gestisce il riutilizzo
+
+### Changed
+- CanvasManager ora traccia l'ID del documento originale (`documentId`)
+- Evento `documentRemoved` emesso quando un documento viene cancellato dal canvas
+- Log migliorato: mostra quando un documento viene riabilitato
+
 ## [1.3.2] - 2024-11-16
 
 ### Fixed

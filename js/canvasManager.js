@@ -83,6 +83,7 @@ class CanvasManager {
 
         const obj = {
             id: `obj_${Date.now()}_${Math.random()}`,
+            documentId: options.documentId || null, // ID del documento originale per tracking
             canvas: docCanvas,
             x: options.x || (this.A4_WIDTH - width) / 2,
             y: options.y || (this.A4_HEIGHT - height) / 2,
@@ -197,6 +198,16 @@ class CanvasManager {
             if (this.selectedObject === obj) {
                 this.selectedObject = null;
             }
+
+            // Emetti evento per notificare la rimozione (per riabilitare il documento)
+            if (obj.documentId) {
+                const event = new CustomEvent('documentRemoved', {
+                    detail: { documentId: obj.documentId }
+                });
+                document.dispatchEvent(event);
+                console.log(`📤 Documento ${obj.documentId} rimosso dal canvas`);
+            }
+
             this.render();
         }
     }
