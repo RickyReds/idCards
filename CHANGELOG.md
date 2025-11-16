@@ -5,6 +5,28 @@ Tutte le modifiche significative a questo progetto verranno documentate in quest
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto aderisce a [Semantic Versioning](https://semver.org/lang/it/).
 
+## [1.3.1] - 2024-11-16
+
+### Fixed
+- **Soglia rotazione aumentata**: Soglia per skip rotazione aumentata da 3° a 5° per documenti landscape con aspect ratio corretto
+  - Previene rotazioni inutili su documenti con piccole imperfezioni di scansione
+  - Soglia generale per altri documenti aumentata da 0.3° a 2° (più realistica)
+
+- **Rilevamento documenti migliorato**: Algoritmo di rilevamento bounds più robusto
+  - Threshold di sensibilità migliorato (98% invece di 100%)
+  - Margini ridotti da 5px a 2px per evitare inclusione spazi bianchi eccessivi
+  - Requisito dimensione minima ridotto da 10% a 5% dell'immagine
+  - Check aggiunto per evitare di accettare bounds che coprono 95%+ dell'immagine
+
+- **Trim whitespace più accurato**: Algoritmo di ritaglio margini completamente rivisto
+  - Conta pixel non-bianchi per riga/colonna invece di cercare primo pixel scuro
+  - Richiede almeno 5% della riga/colonna non-bianco per considerarla bordo
+  - Threshold bianco aumentato da 240 a 245 per maggiore sensibilità
+  - Margine ridotto da 3px a 2px
+
+### Changed
+- Log migliorati con informazioni dettagliate su bounds, aspect ratio e angoli rilevati
+
 ## [1.3.0] - 2024-11-16
 
 ### Fixed

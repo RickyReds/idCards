@@ -139,12 +139,22 @@ class DocumentDetector {
         }
         // Nessun gap chiaro, probabilmente un solo documento
         else {
+            console.log('Nessun gap significativo, ricerca documento singolo...');
             // Trova il bounding box del contenuto (escludendo margini bianchi)
             const bounds = this.findContentBounds(rowBrightness, colBrightness, threshold, width, height);
 
             if (bounds) {
-                console.log(`Documento singolo trovato: ${bounds.x}, ${bounds.y}, ${bounds.width}x${bounds.height}`);
-                documents.push(this.cropDocument(originalImage, bounds.x, bounds.y, bounds.width, bounds.height, 0));
+                const boundsAspect = bounds.width / bounds.height;
+                console.log(`Documento singolo trovato: ${bounds.x}, ${bounds.y}, ${bounds.width}x${bounds.height}, aspect: ${boundsAspect.toFixed(2)}`);
+
+                // Verifica che non sia l'intera immagine (documento non rilevato correttamente)
+                const isFullImage = (bounds.width > width * 0.95 && bounds.height > height * 0.95);
+
+                if (!isFullImage) {
+                    documents.push(this.cropDocument(originalImage, bounds.x, bounds.y, bounds.width, bounds.height, 0));
+                } else {
+                    console.log('⚠️ Bounds coprono quasi tutta l\'immagine, potrebbe non essere un rilevamento accurato');
+                }
             }
         }
 
@@ -214,9 +224,12 @@ class DocumentDetector {
         let top = 0, bottom = height - 1;
         let left = 0, right = width - 1;
 
+        // Usa threshold più basso (più sensibile) per catturare meglio i bordi
+        const sensitiveThreshold = threshold * 0.98;
+
         // Trova top
         for (let y = 0; y < height; y++) {
-            if (rowBrightness[y] < threshold) {
+            if (rowBrightness[y] < sensitiveThreshold) {
                 top = y;
                 break;
             }
@@ -224,7 +237,7 @@ class DocumentDetector {
 
         // Trova bottom
         for (let y = height - 1; y >= 0; y--) {
-            if (rowBrightness[y] < threshold) {
+            if (rowBrightness[y] < sensitiveThreshold) {
                 bottom = y;
                 break;
             }
@@ -232,7 +245,7 @@ class DocumentDetector {
 
         // Trova left
         for (let x = 0; x < width; x++) {
-            if (colBrightness[x] < threshold) {
+            if (colBrightness[x] < sensitiveThreshold) {
                 left = x;
                 break;
             }
@@ -240,14 +253,14 @@ class DocumentDetector {
 
         // Trova right
         for (let x = width - 1; x >= 0; x--) {
-            if (colBrightness[x] < threshold) {
+            if (colBrightness[x] < sensitiveThreshold) {
                 right = x;
                 break;
             }
         }
 
-        // Aggiungi margine
-        const margin = 5;
+        // Margine ridotto per evitare di includere troppo spazio bianco
+        const margin = 2;
         top = Math.max(0, top - margin);
         left = Math.max(0, left - margin);
         bottom = Math.min(height - 1, bottom + margin);
@@ -256,11 +269,14 @@ class DocumentDetector {
         const boundsWidth = right - left;
         const boundsHeight = bottom - top;
 
-        // Verifica che i bounds siano validi
-        if (boundsWidth > width * 0.1 && boundsHeight > height * 0.1) {
+        console.log(`  Bounds trovati: x=${left}, y=${top}, w=${boundsWidth}, h=${boundsHeight}`);
+
+        // Verifica che i bounds siano validi (almeno 5% dell'immagine)
+        if (boundsWidth > width * 0.05 && boundsHeight > height * 0.05) {
             return {x: left, y: top, width: boundsWidth, height: boundsHeight};
         }
 
+        console.log(`  ⚠️ Bounds troppo piccoli, scartati`);
         return null;
     }
 
@@ -314,66 +330,78 @@ class DocumentDetector {
         let top = 0, bottom = height - 1;
         let left = 0, right = width - 1;
 
-        // Trova top
-        outer: for (let row = 0; row < height; row++) {
-            for (let col = 0; col < width; col++) {
-                const idx = (row * width + col) * 4;
-                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-                if (brightness < 240) { // Non bianco
-                    top = row;
-                    break outer;
+        // Soglia più sensibile per catturare meglio i bordi (era 240)
+        const whiteThreshold = 245;
+
+        // Conta pixel non bianchi per riga/colonna (più robusto)
+        const countNonWhitePixels = (startRow, endRow, startCol, endCol) => {
+            let count = 0;
+            for (let row = startRow; row <= endRow; row++) {
+                for (let col = startCol; col <= endCol; col++) {
+                    const idx = (row * width + col) * 4;
+                    const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                    if (brightness < whiteThreshold) count++;
                 }
+            }
+            return count;
+        };
+
+        // Soglia: almeno 5% della riga/colonna deve essere non-bianco
+        const minPixelsThreshold = 0.05;
+
+        // Trova top
+        for (let row = 0; row < height; row++) {
+            const nonWhite = countNonWhitePixels(row, row, 0, width - 1);
+            if (nonWhite > width * minPixelsThreshold) {
+                top = row;
+                break;
             }
         }
 
         // Trova bottom
-        outer: for (let row = height - 1; row >= 0; row--) {
-            for (let col = 0; col < width; col++) {
-                const idx = (row * width + col) * 4;
-                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-                if (brightness < 240) {
-                    bottom = row;
-                    break outer;
-                }
+        for (let row = height - 1; row >= 0; row--) {
+            const nonWhite = countNonWhitePixels(row, row, 0, width - 1);
+            if (nonWhite > width * minPixelsThreshold) {
+                bottom = row;
+                break;
             }
         }
 
         // Trova left
-        outer: for (let col = 0; col < width; col++) {
-            for (let row = 0; row < height; row++) {
-                const idx = (row * width + col) * 4;
-                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-                if (brightness < 240) {
-                    left = col;
-                    break outer;
-                }
+        for (let col = 0; col < width; col++) {
+            const nonWhite = countNonWhitePixels(0, height - 1, col, col);
+            if (nonWhite > height * minPixelsThreshold) {
+                left = col;
+                break;
             }
         }
 
         // Trova right
-        outer: for (let col = width - 1; col >= 0; col--) {
-            for (let row = 0; row < height; row++) {
-                const idx = (row * width + col) * 4;
-                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-                if (brightness < 240) {
-                    right = col;
-                    break outer;
-                }
+        for (let col = width - 1; col >= 0; col--) {
+            const nonWhite = countNonWhitePixels(0, height - 1, col, col);
+            if (nonWhite > height * minPixelsThreshold) {
+                right = col;
+                break;
             }
         }
 
-        // Aggiungi piccolo margine
-        const margin = 3;
+        // Margine minimo per sicurezza
+        const margin = 2;
         top = Math.max(0, top - margin);
         left = Math.max(0, left - margin);
         bottom = Math.min(height - 1, bottom + margin);
         right = Math.min(width - 1, right + margin);
 
+        const trimmedWidth = right - left + 1;
+        const trimmedHeight = bottom - top + 1;
+
+        console.log(`  Trim: ${width}x${height} → ${trimmedWidth}x${trimmedHeight} (removed: top=${top}, left=${left})`);
+
         return {
             x: x + left,
             y: y + top,
-            width: right - left + 1,
-            height: bottom - top + 1
+            width: trimmedWidth,
+            height: trimmedHeight
         };
     }
 

@@ -363,14 +363,18 @@ class ImageProcessor {
         // Usa metodo veloce basato su edge detection
         const angle = this.detectRotationFast(canvas);
 
+        console.log(`  📐 Angolo rilevato: ${angle.toFixed(2)}°`);
+
         // Se documento è landscape con aspect ratio corretto e angolo piccolo, NON ruotare
-        if (isLandscape && hasCorrectAspectRatio && Math.abs(angle) < 3) {
-            console.log('✅ Documento già orientato correttamente (landscape, aspect ratio ok, angolo <3°)');
+        // Soglia aumentata a 5° per evitare correzioni inutili su documenti già dritti
+        if (isLandscape && hasCorrectAspectRatio && Math.abs(angle) < 5) {
+            console.log(`✅ Documento già orientato correttamente (landscape, aspect ratio ok, angolo ${angle.toFixed(2)}° <5°)`);
             return canvas;
         }
 
-        if (Math.abs(angle) < 0.3) {
-            console.log('✅ Documento già allineato (angolo <0.3°)');
+        // Per documenti non-landscape o aspect ratio sbagliato, usa soglia più conservativa (2°)
+        if (Math.abs(angle) < 2) {
+            console.log(`✅ Documento già allineato (angolo ${angle.toFixed(2)}° <2°)`);
             return canvas; // Già allineato
         }
 

@@ -33,7 +33,7 @@ Applicazione web per rilevare, raddrizzare e ottimizzare automaticamente immagin
 
 ## 📌 Versioning
 
-**Versione Corrente: 1.3.0** (2024-11-16)
+**Versione Corrente: 1.3.1** (2024-11-16)
 
 La versione è visibile nel footer dell'applicazione web. Ogni versione segue il formato [Semantic Versioning](https://semver.org/lang/it/) (MAJOR.MINOR.PATCH).
 
@@ -46,7 +46,8 @@ La versione è visibile nel footer dell'applicazione web. Ogni versione segue il
 Vedi [CHANGELOG.md](CHANGELOG.md) per la cronologia completa delle modifiche.
 
 **Ultimi aggiornamenti:**
-- **v1.3.0**: Fix rotazione non necessaria su documenti già orientati correttamente
+- **v1.3.1**: Soglie rotazione e rilevamento documenti migliorate, trim whitespace più accurato
+- **v1.3.0**: Fix rotazione non necessaria su documenti già orientati correttamente + sistema versioning
 - **v1.2.0**: Edge detection migliorato con analisi multi-bordo e mediana
 - **v1.1.0**: Gap detection più robusto con validazione aspect ratio
 - **v1.0.0**: Release iniziale con rilevamento, rotazione ed export
