@@ -3,6 +3,10 @@
  * Coordina tutti i componenti dell'app
  */
 
+// Versione applicazione
+const APP_VERSION = '1.3.0';
+const APP_BUILD_DATE = '2024-11-16';
+
 // Stato globale
 const app = {
     detector: null,
@@ -10,7 +14,8 @@ const app = {
     canvasManager: null,
     exporter: null,
     documents: [], // Documenti rilevati
-    loadingOverlay: null
+    loadingOverlay: null,
+    version: APP_VERSION
 };
 
 /**
@@ -34,7 +39,26 @@ function initializeApp() {
 
     app.loadingOverlay = document.getElementById('loadingOverlay');
 
-    console.log('App inizializzata correttamente');
+    // Mostra versione
+    displayVersion();
+
+    console.log(`✅ ID Cards Composer v${APP_VERSION} inizializzata correttamente`);
+}
+
+/**
+ * Mostra la versione nell'UI
+ */
+function displayVersion() {
+    const versionElement = document.getElementById('appVersion');
+    const buildDateElement = document.getElementById('buildDate');
+
+    if (versionElement) {
+        versionElement.textContent = `v${APP_VERSION}`;
+    }
+
+    if (buildDateElement) {
+        buildDateElement.textContent = APP_BUILD_DATE;
+    }
 }
 
 /**

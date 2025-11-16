@@ -477,3 +477,26 @@ section h2 {
 .dragging {
     opacity: 0.5;
 }
+
+/* Footer */
+.app-footer {
+    margin-top: 30px;
+    padding: 15px 0;
+    text-align: center;
+    border-top: 1px solid #e0e0e0;
+}
+
+.version-info {
+    font-size: 0.85rem;
+    color: #666;
+    font-family: 'Courier New', monospace;
+}
+
+.version-info .separator {
+    margin: 0 8px;
+    color: #ccc;
+}
+
+.version-info span {
+    display: inline-block;
+}
