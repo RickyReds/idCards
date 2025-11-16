@@ -1,5 +1,6 @@
 /**
  * ImageProcessor - Processa immagini (rotazione, allineamento, ottimizzazione)
+ * Versione migliorata con algoritmi più robusti
  */
 class ImageProcessor {
     constructor() {
@@ -34,13 +35,11 @@ class ImageProcessor {
      * @returns {Promise<HTMLImageElement>}
      */
     async loadPDF(file) {
-        // Per semplicità, chiediamo all'utente di convertire il PDF prima
-        // In una versione completa, si userebbe PDF.js
         throw new Error('Per ora, converti il PDF in immagine (JPG/PNG) prima del caricamento');
     }
 
     /**
-     * Rileva l'angolo di rotazione del documento
+     * Rileva l'angolo di rotazione del documento usando projection profile
      * @param {HTMLCanvasElement} canvas - Canvas con il documento
      * @returns {number} Angolo in gradi
      */
@@ -48,66 +47,159 @@ class ImageProcessor {
         const ctx = canvas.getContext('2d');
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-        // Rileva linee orizzontali usando trasformata di Hough semplificata
-        const edges = this.detectHorizontalEdges(imageData);
-        const angle = this.calculateDominantAngle(edges, canvas.width, canvas.height);
+        // Prova angoli da -10 a +10 gradi e trova quello con projection più forte
+        const angles = [];
+        for (let angle = -10; angle <= 10; angle += 0.5) {
+            const variance = this.calculateProjectionVariance(imageData, angle);
+            angles.push({ angle, variance });
+        }
 
-        return angle;
+        // L'angolo corretto è quello con la varianza massima nella proiezione orizzontale
+        angles.sort((a, b) => b.variance - a.variance);
+
+        const bestAngle = angles[0].angle;
+        console.log(`Angolo ottimale rilevato: ${bestAngle.toFixed(2)}°`);
+
+        return bestAngle;
     }
 
     /**
-     * Rileva bordi orizzontali predominanti
+     * Calcola la varianza della proiezione orizzontale per un dato angolo
+     * Una varianza alta indica che il testo è ben allineato orizzontalmente
      */
-    detectHorizontalEdges(imageData) {
+    calculateProjectionVariance(imageData, angle) {
         const width = imageData.width;
         const height = imageData.height;
         const data = imageData.data;
-        const edges = [];
 
-        // Scansiona ogni riga cercando variazioni di intensità
-        for (let y = 1; y < height - 1; y++) {
-            let edgeStrength = 0;
+        // Crea projection profile orizzontale
+        const projection = new Array(height).fill(0);
 
-            for (let x = 1; x < width - 1; x++) {
-                const idx = (y * width + x) * 4;
-                const topIdx = ((y - 1) * width + x) * 4;
-                const bottomIdx = ((y + 1) * width + x) * 4;
+        const angleRad = (angle * Math.PI) / 180;
+        const cos = Math.cos(angleRad);
+        const sin = Math.sin(angleRad);
 
-                const current = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-                const top = (data[topIdx] + data[topIdx + 1] + data[topIdx + 2]) / 3;
-                const bottom = (data[bottomIdx] + data[bottomIdx + 1] + data[bottomIdx + 2]) / 3;
+        // Calcola centro
+        const cx = width / 2;
+        const cy = height / 2;
 
-                edgeStrength += Math.abs(current - top) + Math.abs(current - bottom);
-            }
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                // Ruota virtualmente il punto
+                const rx = Math.floor((x - cx) * cos - (y - cy) * sin + cx);
+                const ry = Math.floor((x - cx) * sin + (y - cy) * cos + cy);
 
-            if (edgeStrength > width * 10) { // Soglia arbitraria
-                edges.push({y, strength: edgeStrength});
+                if (rx >= 0 && rx < width && ry >= 0 && ry < height) {
+                    const idx = (ry * width + rx) * 4;
+                    // Inverti: pixel scuri hanno peso maggiore
+                    const darkness = 255 - ((data[idx] + data[idx + 1] + data[idx + 2]) / 3);
+                    projection[y] += darkness;
+                }
             }
         }
 
-        return edges;
+        // Calcola varianza della proiezione
+        const mean = projection.reduce((a, b) => a + b, 0) / projection.length;
+        const variance = projection.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / projection.length;
+
+        return variance;
     }
 
     /**
-     * Calcola l'angolo dominante dai bordi
+     * Metodo alternativo più veloce: usa edge detection sui bordi del documento
      */
-    calculateDominantAngle(edges, width, height) {
-        if (edges.length < 2) return 0;
+    detectRotationFast(canvas) {
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const width = imageData.width;
+        const height = imageData.height;
+        const data = imageData.data;
 
-        // Trova le due linee più forti (probabilmente bordi superiore e inferiore)
-        const sortedEdges = edges.sort((a, b) => b.strength - a.strength).slice(0, 2);
+        // Trova bordi superiore e inferiore del documento
+        let topY = -1, bottomY = -1;
+        let topLeftX = -1, topRightX = -1;
+        let bottomLeftX = -1, bottomRightX = -1;
 
-        // Calcola angolo medio (semplicistico)
-        // In una versione completa, si userebbe la trasformata di Hough
-        const avgY = sortedEdges.reduce((sum, e) => sum + e.y, 0) / sortedEdges.length;
-        const deviation = Math.abs(avgY - height / 2);
+        // Scansiona dall'alto
+        outer: for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const idx = (y * width + x) * 4;
+                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                if (brightness < 240) {
+                    topY = y;
+                    // Trova left e right di questa riga
+                    for (let x2 = 0; x2 < width; x2++) {
+                        const idx2 = (y * width + x2) * 4;
+                        const br = (data[idx2] + data[idx2 + 1] + data[idx2 + 2]) / 3;
+                        if (br < 240) {
+                            topLeftX = x2;
+                            break;
+                        }
+                    }
+                    for (let x2 = width - 1; x2 >= 0; x2--) {
+                        const idx2 = (y * width + x2) * 4;
+                        const br = (data[idx2] + data[idx2 + 1] + data[idx2 + 2]) / 3;
+                        if (br < 240) {
+                            topRightX = x2;
+                            break;
+                        }
+                    }
+                    break outer;
+                }
+            }
+        }
 
-        // Se la deviazione è alta, probabilmente il documento è ruotato
-        // Calcola approssimazione dell'angolo
-        const angle = Math.atan2(deviation, width) * (180 / Math.PI);
+        // Scansiona dal basso
+        outer: for (let y = height - 1; y >= 0; y--) {
+            for (let x = 0; x < width; x++) {
+                const idx = (y * width + x) * 4;
+                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                if (brightness < 240) {
+                    bottomY = y;
+                    // Trova left e right di questa riga
+                    for (let x2 = 0; x2 < width; x2++) {
+                        const idx2 = (y * width + x2) * 4;
+                        const br = (data[idx2] + data[idx2 + 1] + data[idx2 + 2]) / 3;
+                        if (br < 240) {
+                            bottomLeftX = x2;
+                            break;
+                        }
+                    }
+                    for (let x2 = width - 1; x2 >= 0; x2--) {
+                        const idx2 = (y * width + x2) * 4;
+                        const br = (data[idx2] + data[idx2 + 1] + data[idx2 + 2]) / 3;
+                        if (br < 240) {
+                            bottomRightX = x2;
+                            break;
+                        }
+                    }
+                    break outer;
+                }
+            }
+        }
 
-        // Limita a piccoli angoli (-15 a +15 gradi)
-        return Math.max(-15, Math.min(15, angle * (avgY < height / 2 ? 1 : -1)));
+        if (topY === -1 || bottomY === -1) {
+            console.log('Impossibile rilevare bordi del documento');
+            return 0;
+        }
+
+        // Calcola angolo dal lato sinistro
+        const leftAngle = Math.atan2(bottomLeftX - topLeftX, bottomY - topY) * (180 / Math.PI);
+
+        // Calcola angolo dal lato destro
+        const rightAngle = Math.atan2(bottomRightX - topRightX, bottomY - topY) * (180 / Math.PI);
+
+        // Media dei due
+        const avgAngle = (leftAngle + rightAngle) / 2;
+
+        console.log(`Angolo rilevato (lato sx): ${leftAngle.toFixed(2)}°`);
+        console.log(`Angolo rilevato (lato dx): ${rightAngle.toFixed(2)}°`);
+        console.log(`Angolo medio: ${avgAngle.toFixed(2)}°`);
+
+        // Limita a ±15 gradi
+        const clampedAngle = Math.max(-15, Math.min(15, avgAngle));
+
+        return clampedAngle;
     }
 
     /**
@@ -117,6 +209,11 @@ class ImageProcessor {
      * @returns {HTMLCanvasElement} Nuovo canvas ruotato
      */
     rotateCanvas(sourceCanvas, angle) {
+        if (Math.abs(angle) < 0.1) {
+            console.log('Angolo troppo piccolo, skip rotazione');
+            return sourceCanvas;
+        }
+
         const angleRad = (angle * Math.PI) / 180;
 
         // Calcola dimensioni del nuovo canvas
@@ -130,10 +227,18 @@ class ImageProcessor {
         rotatedCanvas.height = newHeight;
         const ctx = rotatedCanvas.getContext('2d');
 
-        // Ruota attorno al centro
+        // Sfondo bianco
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, newWidth, newHeight);
+
+        // Ruota attorno al centro con antialiasing
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
         ctx.translate(newWidth / 2, newHeight / 2);
         ctx.rotate(angleRad);
         ctx.drawImage(sourceCanvas, -sourceCanvas.width / 2, -sourceCanvas.height / 2);
+
+        console.log(`Rotazione applicata: ${angle.toFixed(2)}°`);
 
         return rotatedCanvas;
     }
@@ -144,12 +249,17 @@ class ImageProcessor {
      * @returns {HTMLCanvasElement} Canvas allineato
      */
     autoAlign(canvas) {
-        const angle = this.detectRotation(canvas);
+        console.log('Inizio auto-allineamento...');
 
-        if (Math.abs(angle) < 0.5) {
+        // Usa metodo veloce basato su edge detection
+        const angle = this.detectRotationFast(canvas);
+
+        if (Math.abs(angle) < 0.3) {
+            console.log('Documento già allineato');
             return canvas; // Già allineato
         }
 
+        // Correggi angolo (negativo perché ruotiamo in senso opposto)
         return this.rotateCanvas(canvas, -angle);
     }
 
@@ -181,7 +291,7 @@ class ImageProcessor {
     }
 
     /**
-     * Migliora la qualità dell'immagine (contrasto, luminosità)
+     * Migliora la qualità dell'immagine (contrasto, nitidezza)
      * @param {HTMLCanvasElement} canvas - Canvas da migliorare
      * @returns {HTMLCanvasElement} Canvas migliorato
      */
@@ -190,17 +300,25 @@ class ImageProcessor {
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
 
-        // Applica leggero aumento del contrasto
-        const contrast = 1.1;
+        // Applica leggero aumento del contrasto e nitidezza
+        const contrast = 1.15;
+        const brightness = 1.05;
         const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
 
         for (let i = 0; i < data.length; i += 4) {
+            // Contrasto
             data[i] = factor * (data[i] - 128) + 128;         // R
             data[i + 1] = factor * (data[i + 1] - 128) + 128; // G
             data[i + 2] = factor * (data[i + 2] - 128) + 128; // B
+
+            // Brightness
+            data[i] = Math.min(255, data[i] * brightness);
+            data[i + 1] = Math.min(255, data[i + 1] * brightness);
+            data[i + 2] = Math.min(255, data[i + 2] * brightness);
         }
 
         ctx.putImageData(imageData, 0, 0);
+        console.log('Ottimizzazione immagine completata');
         return canvas;
     }
 

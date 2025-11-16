@@ -1,5 +1,6 @@
 /**
  * DocumentDetector - Rileva e croppa documenti dalle immagini
+ * Versione migliorata con approccio più robusto
  */
 class DocumentDetector {
     constructor() {
@@ -8,197 +9,316 @@ class DocumentDetector {
     }
 
     /**
-     * Rileva documenti in un'immagine
+     * Rileva documenti in un'immagine usando analisi avanzata
      * @param {HTMLImageElement} image - Immagine da processare
-     * @returns {Promise<Array>} Array di documenti rilevati con coordinate
+     * @returns {Promise<Array>} Array di documenti rilevati
      */
     async detectDocuments(image) {
+        console.log('Avvio rilevamento documenti...');
         this.canvas.width = image.width;
         this.canvas.height = image.height;
         this.ctx.drawImage(image, 0, 0);
 
         const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-        const edges = this.detectEdges(imageData);
-        const contours = this.findContours(edges);
-        const documents = this.extractDocuments(contours, image);
 
-        return documents;
+        // Prova approccio intelligente: analizza proiezioni orizzontali e verticali
+        const documents = this.detectUsingProjection(imageData, image);
+
+        if (documents.length > 0) {
+            console.log(`✓ Rilevati ${documents.length} documenti con analisi proiezione`);
+            return documents;
+        }
+
+        // Fallback: split semplice
+        console.log('Nessun documento rilevato, uso split automatico');
+        return this.splitImageInHalf(image);
     }
 
     /**
-     * Rileva i bordi usando algoritmo Sobel semplificato
+     * Rileva documenti usando projection profile
      */
-    detectEdges(imageData) {
+    detectUsingProjection(imageData, originalImage) {
         const width = imageData.width;
         const height = imageData.height;
         const data = imageData.data;
-        const edges = new Uint8ClampedArray(width * height);
 
-        // Converti in grayscale e applica Sobel
-        for (let y = 1; y < height - 1; y++) {
-            for (let x = 1; x < width - 1; x++) {
-                const idx = (y * width + x) * 4;
-
-                // Grayscale
-                const gray = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-
-                // Sobel kernel semplificato
-                const gx = this.getGradientX(data, x, y, width);
-                const gy = this.getGradientY(data, x, y, width);
-                const magnitude = Math.sqrt(gx * gx + gy * gy);
-
-                edges[y * width + x] = magnitude > 50 ? 255 : 0;
-            }
-        }
-
-        return edges;
-    }
-
-    getGradientX(data, x, y, width) {
-        const idx = (y * width + x) * 4;
-        const left = this.getGrayscale(data, idx - 4);
-        const right = this.getGrayscale(data, idx + 4);
-        return right - left;
-    }
-
-    getGradientY(data, x, y, width) {
-        const idx = (y * width + x) * 4;
-        const top = this.getGrayscale(data, idx - width * 4);
-        const bottom = this.getGrayscale(data, idx + width * 4);
-        return bottom - top;
-    }
-
-    getGrayscale(data, idx) {
-        return (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-    }
-
-    /**
-     * Trova contorni nell'immagine di edge
-     */
-    findContours(edges) {
-        const width = this.canvas.width;
-        const height = this.canvas.height;
-        const visited = new Uint8Array(width * height);
-        const contours = [];
+        // Calcola luminosità media per riga e colonna
+        const rowBrightness = new Array(height).fill(0);
+        const colBrightness = new Array(width).fill(0);
 
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
-                const idx = y * width + x;
-                if (edges[idx] === 255 && !visited[idx]) {
-                    const contour = this.traceContour(edges, visited, x, y, width, height);
-                    if (contour.length > 100) { // Minimo numero di punti
-                        contours.push(contour);
-                    }
-                }
+                const idx = (y * width + x) * 4;
+                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                rowBrightness[y] += brightness;
+                colBrightness[x] += brightness;
             }
         }
 
-        return contours;
-    }
+        // Normalizza
+        for (let y = 0; y < height; y++) rowBrightness[y] /= width;
+        for (let x = 0; x < width; x++) colBrightness[x] /= height;
 
-    /**
-     * Traccia un singolo contorno
-     */
-    traceContour(edges, visited, startX, startY, width, height) {
-        const contour = [];
-        const queue = [[startX, startY]];
+        // Calcola luminosità media globale
+        const avgBrightness = rowBrightness.reduce((a, b) => a + b, 0) / height;
 
-        while (queue.length > 0 && contour.length < 10000) {
-            const [x, y] = queue.shift();
-            const idx = y * width + x;
+        // Trova righe e colonne che sono molto più chiare (sfondo)
+        const threshold = avgBrightness * 0.95; // 95% della luminosità media
 
-            if (x < 0 || x >= width || y < 0 || y >= height) continue;
-            if (visited[idx] || edges[idx] !== 255) continue;
+        // Cerca gap orizzontale (tra documenti disposti verticalmente)
+        const horizontalGap = this.findLargestGap(rowBrightness, threshold, height * 0.05);
 
-            visited[idx] = 1;
-            contour.push({x, y});
+        // Cerca gap verticale (tra documenti disposti orizzontalmente)
+        const verticalGap = this.findLargestGap(colBrightness, threshold, width * 0.05);
 
-            // 8-connected neighbors
-            for (let dy = -1; dy <= 1; dy++) {
-                for (let dx = -1; dx <= 1; dx++) {
-                    if (dx === 0 && dy === 0) continue;
-                    queue.push([x + dx, y + dy]);
-                }
-            }
-        }
-
-        return contour;
-    }
-
-    /**
-     * Estrae documenti dai contorni rilevati
-     */
-    extractDocuments(contours, originalImage) {
         const documents = [];
 
-        // Trova i bounding boxes dei contorni più grandi
-        const boxes = contours
-            .map(contour => this.getBoundingBox(contour))
-            .filter(box => {
-                const area = box.width * box.height;
-                const imageArea = originalImage.width * originalImage.height;
-                // Filtra solo aree significative (tra 5% e 90% dell'immagine)
-                return area > imageArea * 0.05 && area < imageArea * 0.9;
-            })
-            .sort((a, b) => (b.width * b.height) - (a.width * a.height))
-            .slice(0, 2); // Massimo 2 documenti
+        // Se trova un gap significativo orizzontale, split verticale
+        if (horizontalGap && horizontalGap.size > height * 0.03) {
+            console.log(`Gap orizzontale trovato a riga ${horizontalGap.position}, dimensione: ${horizontalGap.size}`);
+            const splitY = horizontalGap.position + Math.floor(horizontalGap.size / 2);
 
-        // Croppa ogni documento
-        boxes.forEach((box, index) => {
-            const croppedCanvas = document.createElement('canvas');
-            const croppedCtx = croppedCanvas.getContext('2d');
+            // Documento superiore
+            documents.push(this.cropDocument(originalImage, 0, 0, width, splitY, 0));
 
-            // Aggiungi margine del 2%
-            const margin = 10;
-            const x = Math.max(0, box.x - margin);
-            const y = Math.max(0, box.y - margin);
-            const w = Math.min(box.width + margin * 2, originalImage.width - x);
-            const h = Math.min(box.height + margin * 2, originalImage.height - y);
+            // Documento inferiore
+            documents.push(this.cropDocument(originalImage, 0, splitY, width, height - splitY, 1));
+        }
+        // Se trova un gap significativo verticale, split orizzontale
+        else if (verticalGap && verticalGap.size > width * 0.03) {
+            console.log(`Gap verticale trovato a colonna ${verticalGap.position}, dimensione: ${verticalGap.size}`);
+            const splitX = verticalGap.position + Math.floor(verticalGap.size / 2);
 
-            croppedCanvas.width = w;
-            croppedCanvas.height = h;
-            croppedCtx.drawImage(originalImage, x, y, w, h, 0, 0, w, h);
+            // Documento sinistro
+            documents.push(this.cropDocument(originalImage, 0, 0, splitX, height, 0));
 
-            documents.push({
-                id: `doc_${Date.now()}_${index}`,
-                canvas: croppedCanvas,
-                bounds: {x, y, width: w, height: h},
-                originalImage: originalImage
-            });
-        });
+            // Documento destro
+            documents.push(this.cropDocument(originalImage, splitX, 0, width - splitX, height, 1));
+        }
+        // Nessun gap chiaro, probabilmente un solo documento
+        else {
+            // Trova il bounding box del contenuto (escludendo margini bianchi)
+            const bounds = this.findContentBounds(rowBrightness, colBrightness, threshold, width, height);
+
+            if (bounds) {
+                console.log(`Documento singolo trovato: ${bounds.x}, ${bounds.y}, ${bounds.width}x${bounds.height}`);
+                documents.push(this.cropDocument(originalImage, bounds.x, bounds.y, bounds.width, bounds.height, 0));
+            }
+        }
 
         return documents;
     }
 
     /**
-     * Calcola bounding box di un contorno
+     * Trova il gap (spazio bianco) più grande in una projection
      */
-    getBoundingBox(contour) {
-        let minX = Infinity, minY = Infinity;
-        let maxX = -Infinity, maxY = -Infinity;
+    findLargestGap(projection, threshold, minGapSize) {
+        let largestGap = null;
+        let currentGapStart = -1;
+        let currentGapSize = 0;
 
-        contour.forEach(point => {
-            minX = Math.min(minX, point.x);
-            minY = Math.min(minY, point.y);
-            maxX = Math.max(maxX, point.x);
-            maxY = Math.max(maxY, point.y);
-        });
+        for (let i = 0; i < projection.length; i++) {
+            if (projection[i] >= threshold) {
+                // Pixel chiaro (probabile sfondo)
+                if (currentGapStart === -1) {
+                    currentGapStart = i;
+                    currentGapSize = 1;
+                } else {
+                    currentGapSize++;
+                }
+            } else {
+                // Pixel scuro (probabile contenuto)
+                if (currentGapStart !== -1) {
+                    // Fine del gap
+                    if (currentGapSize > minGapSize) {
+                        if (!largestGap || currentGapSize > largestGap.size) {
+                            largestGap = {
+                                position: currentGapStart,
+                                size: currentGapSize
+                            };
+                        }
+                    }
+                    currentGapStart = -1;
+                    currentGapSize = 0;
+                }
+            }
+        }
+
+        return largestGap;
+    }
+
+    /**
+     * Trova i bounds del contenuto (escludendo margini bianchi)
+     */
+    findContentBounds(rowBrightness, colBrightness, threshold, width, height) {
+        let top = 0, bottom = height - 1;
+        let left = 0, right = width - 1;
+
+        // Trova top
+        for (let y = 0; y < height; y++) {
+            if (rowBrightness[y] < threshold) {
+                top = y;
+                break;
+            }
+        }
+
+        // Trova bottom
+        for (let y = height - 1; y >= 0; y--) {
+            if (rowBrightness[y] < threshold) {
+                bottom = y;
+                break;
+            }
+        }
+
+        // Trova left
+        for (let x = 0; x < width; x++) {
+            if (colBrightness[x] < threshold) {
+                left = x;
+                break;
+            }
+        }
+
+        // Trova right
+        for (let x = width - 1; x >= 0; x--) {
+            if (colBrightness[x] < threshold) {
+                right = x;
+                break;
+            }
+        }
+
+        // Aggiungi margine
+        const margin = 5;
+        top = Math.max(0, top - margin);
+        left = Math.max(0, left - margin);
+        bottom = Math.min(height - 1, bottom + margin);
+        right = Math.min(width - 1, right + margin);
+
+        const boundsWidth = right - left;
+        const boundsHeight = bottom - top;
+
+        // Verifica che i bounds siano validi
+        if (boundsWidth > width * 0.1 && boundsHeight > height * 0.1) {
+            return {x: left, y: top, width: boundsWidth, height: boundsHeight};
+        }
+
+        return null;
+    }
+
+    /**
+     * Croppa un documento dall'immagine originale
+     */
+    cropDocument(originalImage, x, y, width, height, index) {
+        const croppedCanvas = document.createElement('canvas');
+        const croppedCtx = croppedCanvas.getContext('2d');
+
+        // Trim margini bianchi dal crop
+        const trimmedBounds = this.trimWhitespace(originalImage, x, y, width, height);
+
+        croppedCanvas.width = trimmedBounds.width;
+        croppedCanvas.height = trimmedBounds.height;
+
+        croppedCtx.drawImage(
+            originalImage,
+            trimmedBounds.x, trimmedBounds.y, trimmedBounds.width, trimmedBounds.height,
+            0, 0, trimmedBounds.width, trimmedBounds.height
+        );
 
         return {
-            x: minX,
-            y: minY,
-            width: maxX - minX,
-            height: maxY - minY
+            id: `doc_${Date.now()}_${index}`,
+            canvas: croppedCanvas,
+            bounds: trimmedBounds,
+            originalImage: originalImage
         };
     }
 
     /**
-     * Metodo alternativo: split immagine in 2 parti uguali
-     * Usato come fallback se la detection automatica non trova documenti
+     * Rimuove spazi bianchi attorno a una regione
+     */
+    trimWhitespace(image, x, y, width, height) {
+        // Crea un canvas temporaneo per analizzare la regione
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const tempCtx = tempCanvas.getContext('2d');
+
+        tempCtx.drawImage(image, x, y, width, height, 0, 0, width, height);
+        const imageData = tempCtx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+
+        let top = 0, bottom = height - 1;
+        let left = 0, right = width - 1;
+
+        // Trova top
+        outer: for (let row = 0; row < height; row++) {
+            for (let col = 0; col < width; col++) {
+                const idx = (row * width + col) * 4;
+                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                if (brightness < 240) { // Non bianco
+                    top = row;
+                    break outer;
+                }
+            }
+        }
+
+        // Trova bottom
+        outer: for (let row = height - 1; row >= 0; row--) {
+            for (let col = 0; col < width; col++) {
+                const idx = (row * width + col) * 4;
+                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                if (brightness < 240) {
+                    bottom = row;
+                    break outer;
+                }
+            }
+        }
+
+        // Trova left
+        outer: for (let col = 0; col < width; col++) {
+            for (let row = 0; row < height; row++) {
+                const idx = (row * width + col) * 4;
+                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                if (brightness < 240) {
+                    left = col;
+                    break outer;
+                }
+            }
+        }
+
+        // Trova right
+        outer: for (let col = width - 1; col >= 0; col--) {
+            for (let row = 0; row < height; row++) {
+                const idx = (row * width + col) * 4;
+                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                if (brightness < 240) {
+                    right = col;
+                    break outer;
+                }
+            }
+        }
+
+        // Aggiungi piccolo margine
+        const margin = 3;
+        top = Math.max(0, top - margin);
+        left = Math.max(0, left - margin);
+        bottom = Math.min(height - 1, bottom + margin);
+        right = Math.min(width - 1, right + margin);
+
+        return {
+            x: x + left,
+            y: y + top,
+            width: right - left + 1,
+            height: bottom - top + 1
+        };
+    }
+
+    /**
+     * Metodo fallback: split immagine in 2 parti uguali verticalmente
      */
     splitImageInHalf(image) {
         const documents = [];
         const halfHeight = Math.floor(image.height / 2);
+
+        console.log('Split in 2 parti uguali (orizzontale)');
 
         for (let i = 0; i < 2; i++) {
             const canvas = document.createElement('canvas');
