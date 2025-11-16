@@ -4,7 +4,7 @@
  */
 
 // Versione applicazione
-const APP_VERSION = '1.3.5';
+const APP_VERSION = '1.4.0';
 const APP_BUILD_DATE = '2024-11-16';
 
 // Stato globale
@@ -13,8 +13,10 @@ const app = {
     processor: null,
     canvasManager: null,
     exporter: null,
+    manualEditor: null,
     documents: [], // Documenti rilevati
     usedDocuments: new Set(), // IDs dei documenti già aggiunti al canvas
+    originalFiles: new Map(), // Mappa fileName -> {image, file} per editing manuale
     loadingOverlay: null,
     version: APP_VERSION
 };
@@ -34,6 +36,7 @@ function initializeApp() {
     app.detector = new DocumentDetector();
     app.processor = new ImageProcessor();
     app.exporter = new Exporter();
+    app.manualEditor = new ManualEditor();
 
     const canvas = document.getElementById('a4Canvas');
     app.canvasManager = new CanvasManager(canvas);
@@ -193,6 +196,9 @@ async function processFile(file) {
     // Carica immagine
     const image = await app.processor.loadImage(file);
 
+    // Salva immagine originale per editing manuale
+    app.originalFiles.set(file.name, { image, file });
+
     // Rileva documenti nell'immagine
     let detectedDocs = await app.detector.detectDocuments(image);
 
@@ -226,13 +232,14 @@ async function processFile(file) {
         const processedDoc = {
             id: doc.id,
             canvas: enhancedCanvas,
-            originalBounds: doc.bounds
+            originalBounds: doc.bounds,
+            fileName: file.name // Per editing manuale
         };
 
         app.documents.push(processedDoc);
 
         // Aggiungi alla UI
-        addDocumentToGrid(processedDoc);
+        addDocumentToGrid(processedDoc, file.name);
         console.log(`  ✓ Documento ${i + 1} pronto all'uso`);
     }
 
@@ -243,7 +250,7 @@ async function processFile(file) {
 /**
  * Aggiunge un documento alla griglia
  */
-function addDocumentToGrid(doc) {
+function addDocumentToGrid(doc, fileName = null) {
     const grid = document.getElementById('documentsGrid');
 
     // Rimuovi placeholder se presente
@@ -256,6 +263,9 @@ function addDocumentToGrid(doc) {
     const docElement = document.createElement('div');
     docElement.className = 'document-item';
     docElement.dataset.docId = doc.id;
+    if (fileName) {
+        docElement.dataset.fileName = fileName;
+    }
     docElement.draggable = true;
 
     // Crea thumbnail
@@ -268,10 +278,27 @@ function addDocumentToGrid(doc) {
     label.className = 'doc-label';
     label.textContent = `${doc.canvas.width}x${doc.canvas.height}px`;
 
-    // Azioni (elimina)
+    // Azioni (edit manuale + elimina)
     const actions = document.createElement('div');
     actions.className = 'doc-actions';
 
+    // Bottone Edit Manuale (solo se c'è fileName)
+    if (fileName && app.originalFiles.has(fileName)) {
+        const editBtn = document.createElement('button');
+        editBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>`;
+        editBtn.title = 'Modifica Manualmente';
+        editBtn.className = 'edit-manual-btn';
+        editBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openManualEditor(fileName);
+        });
+        actions.appendChild(editBtn);
+    }
+
+    // Bottone Elimina
     const deleteBtn = document.createElement('button');
     deleteBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -481,4 +508,76 @@ function logInfo(message) {
  */
 function logError(message, error) {
     console.error(`[ERROR] ${message}`, error);
+}
+
+
+/**
+ * Apre l'editor manuale per un file
+ */
+function openManualEditor(fileName) {
+    const fileData = app.originalFiles.get(fileName);
+    if (!fileData) {
+        console.error('File originale non trovato: ' + fileName);
+        return;
+    }
+
+    console.log('📝 Apertura editor manuale per: ' + fileName);
+
+    // Rimuovi documenti automatici per questo file
+    removeDocumentsFromFile(fileName);
+
+    // Apri editor manuale
+    app.manualEditor.open(fileData.image, fileName, (manualDocs) => {
+        handleManualDocumentsComplete(manualDocs, fileName);
+    });
+}
+
+/**
+ * Rimuove tutti i documenti rilevati da un file specifico
+ */
+function removeDocumentsFromFile(fileName) {
+    // Trova tutti i documenti da questo file
+    const docsToRemove = app.documents.filter(doc => doc.fileName === fileName);
+
+    console.log('🗑️ Rimozione ' + docsToRemove.length + ' documenti automatici da ' + fileName);
+
+    // Rimuovi ogni documento
+    docsToRemove.forEach(doc => {
+        removeDocument(doc.id);
+    });
+}
+
+/**
+ * Gestisce i documenti creati manualmente
+ */
+function handleManualDocumentsComplete(manualDocs, fileName) {
+    console.log('✅ Creati ' + manualDocs.length + ' documenti manuali da ' + fileName);
+
+    showLoading(true, 'Elaborazione ' + manualDocs.length + ' documento/i manuali...');
+
+    // Processa ogni documento manuale
+    manualDocs.forEach((doc, index) => {
+        // Ottimizza qualità
+        const enhancedCanvas = app.processor.enhance(doc.canvas);
+
+        // Crea documento processato
+        const processedDoc = {
+            id: doc.id,
+            canvas: enhancedCanvas,
+            originalBounds: doc.bounds,
+            fileName: fileName,
+            rotation: doc.rotation,
+            source: 'manual'
+        };
+
+        app.documents.push(processedDoc);
+        addDocumentToGrid(processedDoc, fileName);
+
+        console.log('  ✓ Documento manuale ' + (index + 1) + '/' + manualDocs.length + ' pronto');
+    });
+
+    updateDocumentsGrid();
+    showLoading(false);
+
+    console.log('🎉 ' + manualDocs.length + ' documenti manuali aggiunti con successo');
 }

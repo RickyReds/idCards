@@ -5,6 +5,40 @@ Tutte le modifiche significative a questo progetto verranno documentate in quest
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto aderisce a [Semantic Versioning](https://semver.org/lang/it/).
 
+## [1.4.0] - 2024-11-16
+
+### Added
+- **Editor Manuale Interattivo**: Sistema completo per selezione e cropping manuale documenti
+  - Modal interattivo con canvas per disegnare bounding boxes
+  - Selezione multipla: disegna più aree sulla stessa immagine
+  - Slider per rotazione manuale (-180° a +180°)
+  - Preview in tempo reale delle selezioni
+  - Lista delle selezioni con possibilità di rimuovere singole aree
+  - Statistiche: dimensioni, rotazione per ogni selezione
+- **Bottone "Modifica Manualmente"**: Su ogni documento rilevato automaticamente
+  - Click sul bottone elimina i documenti auto-rilevati da quel file
+  - Apre l'editor manuale con l'immagine originale
+  - Permette di riselezionare manualmente le aree corrette
+- **Workflow Ibrido Auto+Manuale**:
+  - Processing automatico come prima
+  - Se insoddisfatto, click su "Modifica Manualmente"
+  - Crea selezioni precise con mouse
+  - Ruota se necessario con slider
+  - Conferma e i documenti manuali sostituiscono quelli automatici
+
+### Changed
+- File originali ora salvati in `app.originalFiles` per editing successivo
+- Documenti ora includono campo `fileName` per tracciare il file di origine
+- Documenti manuali marcati con `source: 'manual'` per distinguerli
+- Bottone edit manuale ha hover blu, bottone elimina rimane rosso
+
+### Technical Details
+- Nuovo file `js/manualEditor.js` con classe `ManualEditor`
+- Canvas interattivo con eventi mouse per disegnare rettangoli
+- Supporto rotazione con transform matrix
+- Gestione stato per multiple selezioni
+- CSS responsive per modal editor
+
 ## [1.3.5] - 2024-11-16
 
 ### Fixed

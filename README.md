@@ -23,6 +23,7 @@ Applicazione web per rilevare, raddrizzare e ottimizzare automaticamente immagin
 
 ## 🚀 Come Usare
 
+### Modalità Automatica
 1. Apri `index.html` nel browser
 2. Trascina una o più immagini nella drop zone (o clicca per selezionare)
 3. L'applicazione processa automaticamente ogni immagine:
@@ -30,6 +31,19 @@ Applicazione web per rilevare, raddrizzare e ottimizzare automaticamente immagin
    - Raddrizza ogni documento
    - Ottimizza la qualità
 4. Scarica o copia i risultati
+
+### ✏️ Modalità Manuale (Nuovo!)
+Se il processing automatico non è perfetto:
+
+1. Click sul bottone **"✏️ Modifica Manualmente"** sul documento
+2. I documenti auto-rilevati da quel file vengono rimossi
+3. Si apre l'**Editor Manuale** con l'immagine originale:
+   - 🖱️ **Disegna** un rettangolo trascinando il mouse sull'area del documento
+   - 🔄 **Ruota** con lo slider (-180° / +180°) se necessario
+   - ➕ **Aggiungi** la selezione alla lista
+   - 📦 **Ripeti** per selezionare più documenti dalla stessa immagine
+   - ✅ **Completa** quando hai finito
+4. I documenti selezionati manualmente vengono processati e aggiunti al canvas
 
 ## 🔬 Debug Tool (Sviluppatori)
 
@@ -48,7 +62,7 @@ Il debug tool permette di visualizzare in tempo reale come diversi parametri inf
 
 ## 📌 Versioning
 
-**Versione Corrente: 1.3.5** (2024-11-16)
+**Versione Corrente: 1.4.0** (2024-11-16)
 
 La versione è visibile nel footer dell'applicazione web. Ogni versione segue il formato [Semantic Versioning](https://semver.org/lang/it/) (MAJOR.MINOR.PATCH).
 
@@ -61,6 +75,7 @@ La versione è visibile nel footer dell'applicazione web. Ogni versione segue il
 Vedi [CHANGELOG.md](CHANGELOG.md) per la cronologia completa delle modifiche.
 
 **Ultimi aggiornamenti:**
+- **v1.4.0**: Editor manuale interattivo per selezione e cropping manuale + workflow ibrido auto/manuale
 - **v1.3.5**: Fix crash algoritmo adattivo + fallback permissivo
 - **v1.3.4**: Algoritmo trim adattivo auto-ottimizzante + debug tool interattivo
 - **v1.3.3**: Trim ancora più aggressivo + riutilizzo documenti dopo cancellazione
