@@ -1,240 +1,406 @@
 /**
- * Main Application Controller
- * Orchestrazione del processo di rilevamento e processing
+ * Main Application
+ * Coordina tutti i componenti dell'app
  */
 
-class IDCardApp {
-    constructor() {
-        this.detector = new DocumentDetector();
-        this.processor = new ImageProcessor();
-        this.processedDocuments = [];
+// Stato globale
+const app = {
+    detector: null,
+    processor: null,
+    canvasManager: null,
+    exporter: null,
+    documents: [], // Documenti rilevati
+    loadingOverlay: null
+};
 
-        this.init();
-    }
+/**
+ * Inizializzazione
+ */
+document.addEventListener('DOMContentLoaded', () => {
+    initializeApp();
+    setupEventListeners();
+});
 
-    init() {
-        console.log('🚀 App inizializzata');
+/**
+ * Inizializza i componenti dell'app
+ */
+function initializeApp() {
+    app.detector = new DocumentDetector();
+    app.processor = new ImageProcessor();
+    app.exporter = new Exporter();
 
-        // Setup drag & drop
-        this.setupDragAndDrop();
+    const canvas = document.getElementById('a4Canvas');
+    app.canvasManager = new CanvasManager(canvas);
 
-        // Setup file input
-        const fileInput = document.getElementById('fileInput');
-        const dropZone = document.getElementById('dropZone');
+    app.loadingOverlay = document.getElementById('loadingOverlay');
 
-        dropZone.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', (e) => this.handleFiles(e.target.files));
-    }
+    console.log('App inizializzata correttamente');
+}
 
-    setupDragAndDrop() {
-        const dropZone = document.getElementById('dropZone');
+/**
+ * Setup event listeners
+ */
+function setupEventListeners() {
+    // Drop zone
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
 
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('drag-over');
-        });
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', handleDragOver);
+    dropZone.addEventListener('dragleave', handleDragLeave);
+    dropZone.addEventListener('drop', handleDrop);
 
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('drag-over');
-        });
+    fileInput.addEventListener('change', handleFileSelect);
 
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('drag-over');
-            this.handleFiles(e.dataTransfer.files);
-        });
-    }
+    // Zoom slider
+    const zoomSlider = document.getElementById('zoomSlider');
+    const zoomValue = document.getElementById('zoomValue');
 
-    async handleFiles(files) {
-        if (!files || files.length === 0) return;
+    zoomSlider.addEventListener('input', (e) => {
+        const zoom = parseFloat(e.target.value);
+        app.canvasManager.setZoom(zoom);
+        zoomValue.textContent = `${Math.round(zoom * 100)}%`;
+    });
 
-        console.log(`📁 Ricevuti ${files.length} file`);
+    // Template buttons
+    document.getElementById('btnLayoutVertical').addEventListener('click', () => {
+        app.canvasManager.applyVerticalLayout();
+    });
 
-        // Mostra status
-        this.showProcessing(true);
+    document.getElementById('btnLayoutHorizontal').addEventListener('click', () => {
+        app.canvasManager.applyHorizontalLayout();
+    });
 
-        // Pulisci risultati precedenti
-        this.processedDocuments = [];
-        document.getElementById('results').innerHTML = '';
-
-        // Processa ogni file
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            console.log(`\n📄 Processing file ${i + 1}/${files.length}: ${file.name}`);
-
-            this.updateStatus(`Processando ${file.name} (${i + 1}/${files.length})...`);
-
-            try {
-                await this.processFile(file, i);
-            } catch (error) {
-                console.error(`❌ Errore processing ${file.name}:`, error);
-                this.showError(`Errore processing ${file.name}: ${error.message}`);
-            }
+    document.getElementById('btnClearCanvas').addEventListener('click', () => {
+        if (confirm('Vuoi davvero pulire il canvas?')) {
+            app.canvasManager.clear();
         }
+    });
 
-        this.showProcessing(false);
-        console.log(`\n✅ Tutti i file processati! Totale documenti: ${this.processedDocuments.length}`);
-    }
+    // Export button
+    document.getElementById('btnExport').addEventListener('click', handleExport);
+}
 
-    async processFile(file, fileIndex) {
-        // Carica l'immagine
-        const image = await this.loadImage(file);
+/**
+ * Gestione drag over
+ */
+function handleDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.add('drag-over');
+}
 
-        // Rileva documenti nell'immagine
-        const documents = this.detector.detectDocuments(image);
+/**
+ * Gestione drag leave
+ */
+function handleDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('drag-over');
+}
 
-        if (documents.length === 0) {
-            console.warn('⚠️ Nessun documento rilevato in questo file');
-            return;
+/**
+ * Gestione drop
+ */
+function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('drag-over');
+
+    const files = Array.from(e.dataTransfer.files);
+    processFiles(files);
+}
+
+/**
+ * Gestione selezione file
+ */
+function handleFileSelect(e) {
+    const files = Array.from(e.target.files);
+    processFiles(files);
+}
+
+/**
+ * Processa i file caricati
+ */
+async function processFiles(files) {
+    showLoading(true, 'Caricamento e rilevamento documenti...');
+
+    try {
+        for (const file of files) {
+            await processFile(file);
         }
-
-        console.log(`✅ Rilevati ${documents.length} documento/i`);
-
-        // Processa ogni documento rilevato
-        for (let i = 0; i < documents.length; i++) {
-            const bounds = documents[i];
-            console.log(`\n🔄 Processando documento ${i + 1}/${documents.length}...`);
-
-            // Processa: estrai, ruota, ottimizza
-            const processedCanvas = this.processor.processDocument(image, bounds);
-
-            // Salva risultato
-            const docData = {
-                canvas: processedCanvas,
-                originalFile: file.name,
-                documentIndex: i + 1,
-                totalDocuments: documents.length,
-                fileIndex: fileIndex
-            };
-
-            this.processedDocuments.push(docData);
-
-            // Mostra risultato
-            this.displayDocument(docData);
-
-            console.log(`✅ Documento ${i + 1} processato con successo`);
-        }
-    }
-
-    loadImage(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-
-            reader.onload = (e) => {
-                const img = new Image();
-
-                img.onload = () => resolve(img);
-                img.onerror = () => reject(new Error('Errore caricamento immagine'));
-
-                img.src = e.target.result;
-            };
-
-            reader.onerror = () => reject(new Error('Errore lettura file'));
-            reader.readAsDataURL(file);
-        });
-    }
-
-    displayDocument(docData) {
-        const resultsGrid = document.getElementById('results');
-
-        const card = document.createElement('div');
-        card.className = 'result-card';
-
-        const img = document.createElement('img');
-        img.src = docData.canvas.toDataURL('image/png');
-        img.alt = `Documento ${docData.documentIndex}`;
-
-        const info = document.createElement('div');
-        info.className = 'result-card-info';
-
-        const title = document.createElement('div');
-        title.className = 'result-card-title';
-        title.textContent = `Documento ${docData.documentIndex}`;
-        if (docData.totalDocuments > 1) {
-            title.textContent += ` di ${docData.totalDocuments}`;
-        }
-
-        const meta = document.createElement('div');
-        meta.className = 'result-card-meta';
-        meta.textContent = `Da: ${docData.originalFile} • ${docData.canvas.width}×${docData.canvas.height}px`;
-
-        const actions = document.createElement('div');
-        actions.className = 'result-card-actions';
-
-        const downloadBtn = document.createElement('button');
-        downloadBtn.className = 'btn btn-primary';
-        downloadBtn.textContent = 'Scarica';
-        downloadBtn.onclick = () => this.downloadDocument(docData);
-
-        const copyBtn = document.createElement('button');
-        copyBtn.className = 'btn btn-secondary';
-        copyBtn.textContent = 'Copia';
-        copyBtn.onclick = () => this.copyToClipboard(docData);
-
-        actions.appendChild(downloadBtn);
-        actions.appendChild(copyBtn);
-
-        info.appendChild(title);
-        info.appendChild(meta);
-        info.appendChild(actions);
-
-        card.appendChild(img);
-        card.appendChild(info);
-
-        resultsGrid.appendChild(card);
-    }
-
-    async downloadDocument(docData) {
-        const blob = await this.processor.canvasToBlob(docData.canvas, 'image/png', 0.95);
-
-        // Genera nome file
-        const baseName = docData.originalFile.replace(/\.[^/.]+$/, '');
-        const suffix = docData.totalDocuments > 1 ? `_doc${docData.documentIndex}` : '';
-        const fileName = `${baseName}${suffix}_processed.png`;
-
-        // Download
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        a.click();
-
-        URL.revokeObjectURL(url);
-
-        console.log(`📥 Download: ${fileName}`);
-    }
-
-    async copyToClipboard(docData) {
-        try {
-            const blob = await this.processor.canvasToBlob(docData.canvas, 'image/png', 0.95);
-
-            await navigator.clipboard.write([
-                new ClipboardItem({ 'image/png': blob })
-            ]);
-
-            console.log('📋 Copiato negli appunti');
-            alert('Immagine copiata negli appunti!');
-        } catch (error) {
-            console.error('❌ Errore copia:', error);
-            alert('Errore durante la copia. Usa il pulsante Scarica invece.');
-        }
-    }
-
-    showProcessing(show) {
-        const statusEl = document.getElementById('processingStatus');
-        statusEl.style.display = show ? 'block' : 'none';
-    }
-
-    updateStatus(text) {
-        document.getElementById('statusText').textContent = text;
-    }
-
-    showError(message) {
-        alert(message);
+    } catch (error) {
+        console.error('Errore durante il processing:', error);
+        alert(`Errore: ${error.message}`);
+    } finally {
+        showLoading(false);
     }
 }
 
-// Inizializza app quando DOM è pronto
-document.addEventListener('DOMContentLoaded', () => {
-    window.app = new IDCardApp();
+/**
+ * Processa un singolo file
+ */
+async function processFile(file) {
+    // Verifica tipo file
+    if (!file.type.match(/image\/(png|jpeg|jpg)/)) {
+        if (file.type === 'application/pdf') {
+            alert('I file PDF non sono ancora supportati. Converti il PDF in immagine (PNG/JPG) prima del caricamento.');
+            return;
+        }
+        throw new Error(`Tipo file non supportato: ${file.type}`);
+    }
+
+    // Carica immagine
+    const image = await app.processor.loadImage(file);
+
+    // Rileva documenti nell'immagine
+    let detectedDocs = await app.detector.detectDocuments(image);
+
+    // Se non trova documenti, usa split in metà come fallback
+    if (detectedDocs.length === 0) {
+        console.log('Nessun documento rilevato automaticamente, split in 2 parti');
+        detectedDocs = app.detector.splitImageInHalf(image);
+    }
+
+    // Processa ogni documento rilevato
+    console.log(`Rilevati ${detectedDocs.length} documento/i`);
+    showLoading(true, `Rilevati ${detectedDocs.length} documento/i. Elaborazione...`);
+
+    for (let i = 0; i < detectedDocs.length; i++) {
+        const doc = detectedDocs[i];
+
+        showLoading(true, `Elaborazione documento ${i + 1}/${detectedDocs.length}: allineamento...`);
+        console.log(`Processando documento ${i + 1}/${detectedDocs.length}...`);
+
+        // Auto-allinea (correggi rotazione)
+        const alignedCanvas = app.processor.autoAlign(doc.canvas);
+        console.log(`  ✓ Allineamento completato`);
+
+        showLoading(true, `Elaborazione documento ${i + 1}/${detectedDocs.length}: ottimizzazione...`);
+
+        // Ottimizza qualità
+        const enhancedCanvas = app.processor.enhance(alignedCanvas);
+        console.log(`  ✓ Ottimizzazione completata`);
+
+        // Aggiungi alla lista documenti
+        const processedDoc = {
+            id: doc.id,
+            canvas: enhancedCanvas,
+            originalBounds: doc.bounds
+        };
+
+        app.documents.push(processedDoc);
+
+        // Aggiungi alla UI
+        addDocumentToGrid(processedDoc);
+        console.log(`  ✓ Documento ${i + 1} pronto all'uso`);
+    }
+
+    updateDocumentsGrid();
+    console.log('Tutti i documenti sono stati processati e sono pronti all\'uso');
+}
+
+/**
+ * Aggiunge un documento alla griglia
+ */
+function addDocumentToGrid(doc) {
+    const grid = document.getElementById('documentsGrid');
+
+    // Rimuovi placeholder se presente
+    const placeholder = grid.querySelector('.placeholder');
+    if (placeholder) {
+        placeholder.remove();
+    }
+
+    // Crea elemento documento
+    const docElement = document.createElement('div');
+    docElement.className = 'document-item';
+    docElement.dataset.docId = doc.id;
+    docElement.draggable = true;
+
+    // Crea thumbnail
+    const thumbnail = document.createElement('img');
+    thumbnail.src = doc.canvas.toDataURL('image/png');
+    thumbnail.alt = 'Documento';
+
+    // Label
+    const label = document.createElement('div');
+    label.className = 'doc-label';
+    label.textContent = `${doc.canvas.width}x${doc.canvas.height}px`;
+
+    // Azioni (elimina)
+    const actions = document.createElement('div');
+    actions.className = 'doc-actions';
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+    </svg>`;
+    deleteBtn.title = 'Elimina';
+    deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeDocument(doc.id);
+    });
+
+    actions.appendChild(deleteBtn);
+
+    docElement.appendChild(thumbnail);
+    docElement.appendChild(label);
+    docElement.appendChild(actions);
+
+    // Drag events
+    docElement.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', doc.id);
+        docElement.classList.add('dragging');
+    });
+
+    docElement.addEventListener('dragend', () => {
+        docElement.classList.remove('dragging');
+    });
+
+    // Click per aggiungere al canvas
+    docElement.addEventListener('click', () => {
+        addDocumentToCanvas(doc);
+    });
+
+    grid.appendChild(docElement);
+}
+
+/**
+ * Aggiunge un documento al canvas A4
+ */
+function addDocumentToCanvas(doc) {
+    app.canvasManager.addDocument(doc.canvas);
+
+    // Nascondi la guida se è il primo documento
+    const guide = document.querySelector('.canvas-guide');
+    if (guide && app.canvasManager.objects.length > 0) {
+        guide.style.display = 'none';
+    }
+}
+
+/**
+ * Rimuove un documento
+ */
+function removeDocument(docId) {
+    // Rimuovi dalla lista
+    app.documents = app.documents.filter(d => d.id !== docId);
+
+    // Rimuovi dalla UI
+    const element = document.querySelector(`[data-doc-id="${docId}"]`);
+    if (element) {
+        element.remove();
+    }
+
+    updateDocumentsGrid();
+}
+
+/**
+ * Aggiorna la griglia documenti
+ */
+function updateDocumentsGrid() {
+    const grid = document.getElementById('documentsGrid');
+
+    if (grid.children.length === 0) {
+        const placeholder = document.createElement('p');
+        placeholder.className = 'placeholder';
+        placeholder.textContent = 'Nessun documento caricato';
+        grid.appendChild(placeholder);
+    }
+}
+
+/**
+ * Setup drag-drop sul canvas
+ */
+const canvasContainer = document.getElementById('canvasContainer');
+
+canvasContainer.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
 });
+
+canvasContainer.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const docId = e.dataTransfer.getData('text/plain');
+    const doc = app.documents.find(d => d.id === docId);
+
+    if (doc) {
+        const canvasRect = app.canvasManager.canvas.getBoundingClientRect();
+
+        // Calcola posizione relativa sul canvas tenendo conto del display scale
+        const scaleX = app.canvasManager.canvas.width / canvasRect.width;
+        const scaleY = app.canvasManager.canvas.height / canvasRect.height;
+        const x = (e.clientX - canvasRect.left) * scaleX;
+        const y = (e.clientY - canvasRect.top) * scaleY;
+
+        app.canvasManager.addDocument(doc.canvas, {x, y});
+
+        // Nascondi guida
+        const guide = document.querySelector('.canvas-guide');
+        if (guide) {
+            guide.style.display = 'none';
+        }
+    }
+});
+
+/**
+ * Gestione export
+ */
+async function handleExport() {
+    if (app.canvasManager.objects.length === 0) {
+        alert('Aggiungi almeno un documento al canvas prima di esportare');
+        return;
+    }
+
+    showLoading(true);
+
+    try {
+        // Ottieni formato selezionato
+        const format = document.querySelector('input[name="exportFormat"]:checked').value;
+
+        // Esporta canvas (senza griglia)
+        const exportCanvas = app.canvasManager.export();
+
+        // Esporta nel formato richiesto
+        await app.exporter.export(exportCanvas, format);
+
+        console.log(`Documento esportato come ${format.toUpperCase()}`);
+    } catch (error) {
+        console.error('Errore durante export:', error);
+        alert(`Errore durante l'esportazione: ${error.message}`);
+    } finally {
+        showLoading(false);
+    }
+}
+
+/**
+ * Mostra/nascondi loading overlay
+ */
+function showLoading(show, message = 'Elaborazione in corso...') {
+    if (show) {
+        app.loadingOverlay.classList.add('active');
+        const loadingText = app.loadingOverlay.querySelector('p');
+        if (loadingText) {
+            loadingText.textContent = message;
+        }
+    } else {
+        app.loadingOverlay.classList.remove('active');
+    }
+}
+
+/**
+ * Utility: Log info
+ */
+function logInfo(message) {
+    console.log(`[INFO] ${message}`);
+}
+
+/**
+ * Utility: Log error
+ */
+function logError(message, error) {
+    console.error(`[ERROR] ${message}`, error);
+}

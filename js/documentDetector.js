@@ -1,306 +1,388 @@
 /**
- * Document Detector con algoritmi robusti
- * - Proiezioni luminosità con soglie adattive
- * - Validazione aspect ratio (carte ID ~1.586 come carta di credito)
- * - Prevenzione falsi positivi
+ * DocumentDetector - Rileva e croppa documenti dalle immagini
+ * Versione migliorata con approccio più robusto
  */
-
 class DocumentDetector {
     constructor() {
-        // Aspect ratio tipico delle carte ID (simile a carta di credito: 85.60mm × 53.98mm)
-        this.CARD_ASPECT_RATIO = 1.586;
-        this.ASPECT_RATIO_TOLERANCE = 0.4; // Tolleranza ±40%
-
-        // Dimensioni minime ragionevoli per una carta (in pixel)
-        this.MIN_CARD_WIDTH = 200;
-        this.MIN_CARD_HEIGHT = 120;
-
-        // Soglie per rilevamento gap
-        this.GAP_MIN_SIZE_PERCENT = 0.08; // Gap minimo 8% della dimensione immagine
-        this.BRIGHTNESS_THRESHOLD = 240; // Soglia per considerare "bianco" (su scala 0-255)
+        this.canvas = document.createElement('canvas');
+        this.ctx = this.canvas.getContext('2d');
     }
 
     /**
-     * Rileva uno o più documenti in un'immagine
-     * @param {HTMLImageElement} image
-     * @returns {Array} Array di rettangoli {x, y, width, height}
+     * Rileva documenti in un'immagine usando analisi avanzata
+     * @param {HTMLImageElement} image - Immagine da processare
+     * @returns {Promise<Array>} Array di documenti rilevati
      */
-    detectDocuments(image) {
-        console.log('🔍 Avvio rilevamento documenti...');
+    async detectDocuments(image) {
+        console.log('Avvio rilevamento documenti...');
+        this.canvas.width = image.width;
+        this.canvas.height = image.height;
+        this.ctx.drawImage(image, 0, 0);
 
-        const canvas = document.createElement('canvas');
-        canvas.width = image.width;
-        canvas.height = image.height;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        ctx.drawImage(image, 0, 0);
+        const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
 
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const { width, height } = imageData;
+        // Prova approccio intelligente: analizza proiezioni orizzontali e verticali
+        const documents = this.detectUsingProjection(imageData, image);
 
-        // Calcola proiezioni di luminosità
-        const horizontalProjection = this.calculateHorizontalProjection(imageData);
-        const verticalProjection = this.calculateVerticalProjection(imageData);
-
-        // Trova gap significativi
-        const horizontalGaps = this.findGaps(horizontalProjection, height, 'orizzontale');
-        const verticalGaps = this.findGaps(verticalProjection, width, 'verticale');
-
-        console.log(`📊 Gap orizzontali trovati: ${horizontalGaps.length}`);
-        console.log(`📊 Gap verticali trovati: ${verticalGaps.length}`);
-
-        let documents = [];
-
-        // Se non ci sono gap significativi, è un singolo documento
-        if (horizontalGaps.length === 0 && verticalGaps.length === 0) {
-            const bounds = this.findDocumentBounds(imageData);
-            if (bounds) {
-                documents = [bounds];
-                console.log('📄 Documento singolo rilevato:', bounds);
-            }
-        } else {
-            // Dividi l'immagine in base ai gap trovati
-            documents = this.splitByGaps(imageData, horizontalGaps, verticalGaps);
+        if (documents.length > 0) {
+            console.log(`✓ Rilevati ${documents.length} documenti con analisi proiezione`);
+            return documents;
         }
 
-        // Valida e filtra documenti basandosi su dimensioni e aspect ratio
-        documents = this.validateDocuments(documents, width, height);
-
-        console.log(`✅ Rilevati ${documents.length} documento/i valido/i`);
-        return documents;
+        // Fallback: split semplice
+        console.log('Nessun documento rilevato, uso split automatico');
+        return this.splitImageInHalf(image);
     }
 
     /**
-     * Calcola proiezione orizzontale (somma luminosità per riga)
+     * Rileva documenti usando projection profile
      */
-    calculateHorizontalProjection(imageData) {
-        const { width, height, data } = imageData;
-        const projection = new Float32Array(height);
+    detectUsingProjection(imageData, originalImage) {
+        const width = imageData.width;
+        const height = imageData.height;
+        const data = imageData.data;
+
+        // Calcola luminosità media per riga e colonna
+        const rowBrightness = new Array(height).fill(0);
+        const colBrightness = new Array(width).fill(0);
 
         for (let y = 0; y < height; y++) {
-            let rowBrightness = 0;
             for (let x = 0; x < width; x++) {
                 const idx = (y * width + x) * 4;
                 const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-                rowBrightness += brightness;
-            }
-            projection[y] = rowBrightness / width; // Media per la riga
-        }
-
-        return projection;
-    }
-
-    /**
-     * Calcola proiezione verticale (somma luminosità per colonna)
-     */
-    calculateVerticalProjection(imageData) {
-        const { width, height, data } = imageData;
-        const projection = new Float32Array(width);
-
-        for (let x = 0; x < width; x++) {
-            let colBrightness = 0;
-            for (let y = 0; y < height; y++) {
-                const idx = (y * width + x) * 4;
-                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-                colBrightness += brightness;
-            }
-            projection[x] = colBrightness / height; // Media per la colonna
-        }
-
-        return projection;
-    }
-
-    /**
-     * Trova gap (zone bianche) nella proiezione
-     */
-    findGaps(projection, imageSize, direction) {
-        const minGapSize = Math.floor(imageSize * this.GAP_MIN_SIZE_PERCENT);
-        const gaps = [];
-        let gapStart = -1;
-        let gapSize = 0;
-
-        for (let i = 0; i < projection.length; i++) {
-            if (projection[i] >= this.BRIGHTNESS_THRESHOLD) {
-                // Pixel bianco
-                if (gapStart === -1) {
-                    gapStart = i;
-                    gapSize = 1;
-                } else {
-                    gapSize++;
-                }
-            } else {
-                // Fine del gap
-                if (gapStart !== -1 && gapSize >= minGapSize) {
-                    const gap = {
-                        position: gapStart,
-                        size: gapSize,
-                        center: gapStart + Math.floor(gapSize / 2)
-                    };
-                    gaps.push(gap);
-                    console.log(`  Gap ${direction} a posizione ${gap.position}, dimensione: ${gap.size}px`);
-                }
-                gapStart = -1;
-                gapSize = 0;
+                rowBrightness[y] += brightness;
+                colBrightness[x] += brightness;
             }
         }
 
-        // Controlla gap finale
-        if (gapStart !== -1 && gapSize >= minGapSize) {
-            const gap = {
-                position: gapStart,
-                size: gapSize,
-                center: gapStart + Math.floor(gapSize / 2)
-            };
-            gaps.push(gap);
-            console.log(`  Gap ${direction} a posizione ${gap.position}, dimensione: ${gap.size}px`);
-        }
+        // Normalizza
+        for (let y = 0; y < height; y++) rowBrightness[y] /= width;
+        for (let x = 0; x < width; x++) colBrightness[x] /= height;
 
-        return gaps;
-    }
+        // Calcola luminosità media globale
+        const avgBrightness = rowBrightness.reduce((a, b) => a + b, 0) / height;
 
-    /**
-     * Divide l'immagine in base ai gap trovati
-     */
-    splitByGaps(imageData, horizontalGaps, verticalGaps) {
-        const { width, height } = imageData;
+        // Trova righe e colonne che sono molto più chiare (sfondo)
+        const threshold = avgBrightness * 0.95; // 95% della luminosità media
+
+        // SOGLIE PIÙ RESTRITTIVE per evitare falsi positivi
+        // Gap minimo: 10% della dimensione (era 5%)
+        const horizontalGap = this.findLargestGap(rowBrightness, threshold, height * 0.10);
+        const verticalGap = this.findLargestGap(colBrightness, threshold, width * 0.10);
+
         const documents = [];
 
-        // Seleziona il gap più grande e più centrale
-        const primaryHGap = this.selectBestGap(horizontalGaps, height);
-        const primaryVGap = this.selectBestGap(verticalGaps, width);
+        // Aspect ratio tipico carte ID (come carta di credito): 85.6mm x 53.98mm ≈ 1.586
+        const EXPECTED_ASPECT_RATIO = 1.586;
+        const ASPECT_TOLERANCE = 0.5; // ±50% tolleranza
 
-        if (primaryHGap && !primaryVGap) {
-            // Dividi orizzontalmente (documenti uno sopra l'altro)
-            const top = this.findDocumentBounds(imageData, 0, 0, width, primaryHGap.position);
-            const bottom = this.findDocumentBounds(imageData, 0, primaryHGap.position + primaryHGap.size, width, height - (primaryHGap.position + primaryHGap.size));
+        // Se trova un gap significativo orizzontale, split verticale
+        // Gap deve essere > 12% della dimensione (era 3%)
+        if (horizontalGap && horizontalGap.size > height * 0.12) {
+            console.log(`Gap orizzontale trovato a riga ${horizontalGap.position}, dimensione: ${horizontalGap.size}`);
+            const splitY = horizontalGap.position + Math.floor(horizontalGap.size / 2);
 
-            if (top) documents.push(top);
-            if (bottom) documents.push(bottom);
-        } else if (primaryVGap && !primaryHGap) {
-            // Dividi verticalmente (documenti affiancati)
-            const left = this.findDocumentBounds(imageData, 0, 0, primaryVGap.position, height);
-            const right = this.findDocumentBounds(imageData, primaryVGap.position + primaryVGap.size, 0, width - (primaryVGap.position + primaryVGap.size), height);
+            // Valida che le parti abbiano sense come documenti separati
+            const topHeight = splitY;
+            const bottomHeight = height - splitY;
+            const topAspect = width / topHeight;
+            const bottomAspect = width / bottomHeight;
 
-            if (left) documents.push(left);
-            if (right) documents.push(right);
-        } else if (primaryHGap && primaryVGap) {
-            // Griglia 2x2
-            const splitY = primaryHGap.center;
-            const splitX = primaryVGap.center;
+            // Verifica aspect ratio ragionevoli
+            const isTopValid = this.isValidAspectRatio(topAspect, EXPECTED_ASPECT_RATIO, ASPECT_TOLERANCE);
+            const isBottomValid = this.isValidAspectRatio(bottomAspect, EXPECTED_ASPECT_RATIO, ASPECT_TOLERANCE);
 
-            const topLeft = this.findDocumentBounds(imageData, 0, 0, splitX, splitY);
-            const topRight = this.findDocumentBounds(imageData, splitX, 0, width - splitX, splitY);
-            const bottomLeft = this.findDocumentBounds(imageData, 0, splitY, splitX, height - splitY);
-            const bottomRight = this.findDocumentBounds(imageData, splitX, splitY, width - splitX, height - splitY);
+            if (isTopValid && isBottomValid) {
+                console.log(`  ✓ Split valido (aspect ratios: ${topAspect.toFixed(2)}, ${bottomAspect.toFixed(2)})`);
+                documents.push(this.cropDocument(originalImage, 0, 0, width, splitY, 0));
+                documents.push(this.cropDocument(originalImage, 0, splitY, width, height - splitY, 1));
+            } else {
+                console.log(`  ✗ Split scartato (aspect ratios non validi: ${topAspect.toFixed(2)}, ${bottomAspect.toFixed(2)})`);
+            }
+        }
+        // Se trova un gap significativo verticale, split orizzontale
+        else if (verticalGap && verticalGap.size > width * 0.12) {
+            console.log(`Gap verticale trovato a colonna ${verticalGap.position}, dimensione: ${verticalGap.size}`);
+            const splitX = verticalGap.position + Math.floor(verticalGap.size / 2);
 
-            if (topLeft) documents.push(topLeft);
-            if (topRight) documents.push(topRight);
-            if (bottomLeft) documents.push(bottomLeft);
-            if (bottomRight) documents.push(bottomRight);
-        } else {
-            // Nessun gap valido, documento singolo
-            const bounds = this.findDocumentBounds(imageData);
-            if (bounds) documents.push(bounds);
+            // Valida che le parti abbiano senso come documenti separati
+            const leftWidth = splitX;
+            const rightWidth = width - splitX;
+            const leftAspect = leftWidth / height;
+            const rightAspect = rightWidth / height;
+
+            const isLeftValid = this.isValidAspectRatio(leftAspect, EXPECTED_ASPECT_RATIO, ASPECT_TOLERANCE);
+            const isRightValid = this.isValidAspectRatio(rightAspect, EXPECTED_ASPECT_RATIO, ASPECT_TOLERANCE);
+
+            if (isLeftValid && isRightValid) {
+                console.log(`  ✓ Split valido (aspect ratios: ${leftAspect.toFixed(2)}, ${rightAspect.toFixed(2)})`);
+                documents.push(this.cropDocument(originalImage, 0, 0, splitX, height, 0));
+                documents.push(this.cropDocument(originalImage, splitX, 0, width - splitX, height, 1));
+            } else {
+                console.log(`  ✗ Split scartato (aspect ratios non validi: ${leftAspect.toFixed(2)}, ${rightAspect.toFixed(2)})`);
+            }
+        }
+        // Nessun gap chiaro, probabilmente un solo documento
+        else {
+            // Trova il bounding box del contenuto (escludendo margini bianchi)
+            const bounds = this.findContentBounds(rowBrightness, colBrightness, threshold, width, height);
+
+            if (bounds) {
+                console.log(`Documento singolo trovato: ${bounds.x}, ${bounds.y}, ${bounds.width}x${bounds.height}`);
+                documents.push(this.cropDocument(originalImage, bounds.x, bounds.y, bounds.width, bounds.height, 0));
+            }
         }
 
         return documents;
     }
 
     /**
-     * Seleziona il gap migliore (più grande e più centrale)
+     * Verifica se un aspect ratio è valido per un documento ID
+     * @param {number} aspectRatio - Aspect ratio da verificare
+     * @param {number} expected - Aspect ratio atteso
+     * @param {number} tolerance - Tolleranza (es. 0.5 = ±50%)
+     * @returns {boolean}
      */
-    selectBestGap(gaps, imageSize) {
-        if (gaps.length === 0) return null;
-        if (gaps.length === 1) return gaps[0];
+    isValidAspectRatio(aspectRatio, expected, tolerance) {
+        const minAspect = expected * (1 - tolerance);
+        const maxAspect = expected * (1 + tolerance);
 
-        // Preferisci gap più grandi e più centrali
-        return gaps.reduce((best, gap) => {
-            const centerDist = Math.abs(gap.center - imageSize / 2);
-            const bestCenterDist = Math.abs(best.center - imageSize / 2);
+        // Accetta sia orientamento orizzontale che verticale
+        const isHorizontalValid = aspectRatio >= minAspect && aspectRatio <= maxAspect;
+        const isVerticalValid = (1 / aspectRatio) >= minAspect && (1 / aspectRatio) <= maxAspect;
 
-            // Peso: 70% size, 30% centralità
-            const score = gap.size * 0.7 - centerDist * 0.3;
-            const bestScore = best.size * 0.7 - bestCenterDist * 0.3;
-
-            return score > bestScore ? gap : best;
-        });
+        return isHorizontalValid || isVerticalValid;
     }
 
     /**
-     * Trova i bounds precisi di un documento in una regione
+     * Trova il gap (spazio bianco) più grande in una projection
      */
-    findDocumentBounds(imageData, startX = 0, startY = 0, regionWidth = null, regionHeight = null) {
-        const { width, height, data } = imageData;
-        const endX = startX + (regionWidth || width);
-        const endY = startY + (regionHeight || height);
+    findLargestGap(projection, threshold, minGapSize) {
+        let largestGap = null;
+        let currentGapStart = -1;
+        let currentGapSize = 0;
 
-        let minX = endX, maxX = startX;
-        let minY = endY, maxY = startY;
-
-        // Scansiona la regione per trovare i pixel non-bianchi
-        for (let y = startY; y < endY; y++) {
-            for (let x = startX; x < endX; x++) {
-                const idx = (y * width + x) * 4;
-                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-
-                if (brightness < this.BRIGHTNESS_THRESHOLD) {
-                    minX = Math.min(minX, x);
-                    maxX = Math.max(maxX, x);
-                    minY = Math.min(minY, y);
-                    maxY = Math.max(maxY, y);
+        for (let i = 0; i < projection.length; i++) {
+            if (projection[i] >= threshold) {
+                // Pixel chiaro (probabile sfondo)
+                if (currentGapStart === -1) {
+                    currentGapStart = i;
+                    currentGapSize = 1;
+                } else {
+                    currentGapSize++;
+                }
+            } else {
+                // Pixel scuro (probabile contenuto)
+                if (currentGapStart !== -1) {
+                    // Fine del gap
+                    if (currentGapSize > minGapSize) {
+                        if (!largestGap || currentGapSize > largestGap.size) {
+                            largestGap = {
+                                position: currentGapStart,
+                                size: currentGapSize
+                            };
+                        }
+                    }
+                    currentGapStart = -1;
+                    currentGapSize = 0;
                 }
             }
         }
 
-        // Verifica se abbiamo trovato qualcosa
-        if (maxX <= minX || maxY <= minY) {
-            return null;
+        return largestGap;
+    }
+
+    /**
+     * Trova i bounds del contenuto (escludendo margini bianchi)
+     */
+    findContentBounds(rowBrightness, colBrightness, threshold, width, height) {
+        let top = 0, bottom = height - 1;
+        let left = 0, right = width - 1;
+
+        // Trova top
+        for (let y = 0; y < height; y++) {
+            if (rowBrightness[y] < threshold) {
+                top = y;
+                break;
+            }
         }
 
+        // Trova bottom
+        for (let y = height - 1; y >= 0; y--) {
+            if (rowBrightness[y] < threshold) {
+                bottom = y;
+                break;
+            }
+        }
+
+        // Trova left
+        for (let x = 0; x < width; x++) {
+            if (colBrightness[x] < threshold) {
+                left = x;
+                break;
+            }
+        }
+
+        // Trova right
+        for (let x = width - 1; x >= 0; x--) {
+            if (colBrightness[x] < threshold) {
+                right = x;
+                break;
+            }
+        }
+
+        // Aggiungi margine
+        const margin = 5;
+        top = Math.max(0, top - margin);
+        left = Math.max(0, left - margin);
+        bottom = Math.min(height - 1, bottom + margin);
+        right = Math.min(width - 1, right + margin);
+
+        const boundsWidth = right - left;
+        const boundsHeight = bottom - top;
+
+        // Verifica che i bounds siano validi
+        if (boundsWidth > width * 0.1 && boundsHeight > height * 0.1) {
+            return {x: left, y: top, width: boundsWidth, height: boundsHeight};
+        }
+
+        return null;
+    }
+
+    /**
+     * Croppa un documento dall'immagine originale
+     */
+    cropDocument(originalImage, x, y, width, height, index) {
+        const croppedCanvas = document.createElement('canvas');
+        const croppedCtx = croppedCanvas.getContext('2d');
+
+        // Trim margini bianchi dal crop
+        const trimmedBounds = this.trimWhitespace(originalImage, x, y, width, height);
+
+        croppedCanvas.width = trimmedBounds.width;
+        croppedCanvas.height = trimmedBounds.height;
+
+        croppedCtx.drawImage(
+            originalImage,
+            trimmedBounds.x, trimmedBounds.y, trimmedBounds.width, trimmedBounds.height,
+            0, 0, trimmedBounds.width, trimmedBounds.height
+        );
+
         return {
-            x: minX,
-            y: minY,
-            width: maxX - minX + 1,
-            height: maxY - minY + 1
+            id: `doc_${Date.now()}_${index}`,
+            canvas: croppedCanvas,
+            bounds: trimmedBounds,
+            originalImage: originalImage
         };
     }
 
     /**
-     * Valida documenti basandosi su dimensioni e aspect ratio
+     * Rimuove spazi bianchi attorno a una regione
      */
-    validateDocuments(documents, imageWidth, imageHeight) {
-        return documents.filter(doc => {
-            // Check dimensioni minime
-            if (doc.width < this.MIN_CARD_WIDTH || doc.height < this.MIN_CARD_HEIGHT) {
-                console.warn(`⚠️ Documento scartato: troppo piccolo (${doc.width}x${doc.height})`);
-                return false;
+    trimWhitespace(image, x, y, width, height) {
+        // Crea un canvas temporaneo per analizzare la regione
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const tempCtx = tempCanvas.getContext('2d');
+
+        tempCtx.drawImage(image, x, y, width, height, 0, 0, width, height);
+        const imageData = tempCtx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+
+        let top = 0, bottom = height - 1;
+        let left = 0, right = width - 1;
+
+        // Trova top
+        outer: for (let row = 0; row < height; row++) {
+            for (let col = 0; col < width; col++) {
+                const idx = (row * width + col) * 4;
+                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                if (brightness < 240) { // Non bianco
+                    top = row;
+                    break outer;
+                }
             }
+        }
 
-            // Check aspect ratio
-            const aspectRatio = doc.width / doc.height;
-            const minAspect = this.CARD_ASPECT_RATIO * (1 - this.ASPECT_RATIO_TOLERANCE);
-            const maxAspect = this.CARD_ASPECT_RATIO * (1 + this.ASPECT_RATIO_TOLERANCE);
-
-            // Accetta sia orizzontale che verticale
-            const isValid = (aspectRatio >= minAspect && aspectRatio <= maxAspect) ||
-                          (1/aspectRatio >= minAspect && 1/aspectRatio <= maxAspect);
-
-            if (!isValid) {
-                console.warn(`⚠️ Documento scartato: aspect ratio insolito (${aspectRatio.toFixed(2)}, atteso ~${this.CARD_ASPECT_RATIO.toFixed(2)})`);
-                return false;
+        // Trova bottom
+        outer: for (let row = height - 1; row >= 0; row--) {
+            for (let col = 0; col < width; col++) {
+                const idx = (row * width + col) * 4;
+                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                if (brightness < 240) {
+                    bottom = row;
+                    break outer;
+                }
             }
+        }
 
-            // Check che non sia troppo piccolo rispetto all'immagine (potrebbe essere rumore)
-            const areaPercent = (doc.width * doc.height) / (imageWidth * imageHeight);
-            if (areaPercent < 0.05) { // Meno del 5% dell'immagine
-                console.warn(`⚠️ Documento scartato: area troppo piccola (${(areaPercent * 100).toFixed(1)}% dell'immagine)`);
-                return false;
+        // Trova left
+        outer: for (let col = 0; col < width; col++) {
+            for (let row = 0; row < height; row++) {
+                const idx = (row * width + col) * 4;
+                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                if (brightness < 240) {
+                    left = col;
+                    break outer;
+                }
             }
+        }
 
-            console.log(`✅ Documento valido: ${doc.width}x${doc.height}, aspect ratio: ${aspectRatio.toFixed(2)}`);
-            return true;
-        });
+        // Trova right
+        outer: for (let col = width - 1; col >= 0; col--) {
+            for (let row = 0; row < height; row++) {
+                const idx = (row * width + col) * 4;
+                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                if (brightness < 240) {
+                    right = col;
+                    break outer;
+                }
+            }
+        }
+
+        // Aggiungi piccolo margine
+        const margin = 3;
+        top = Math.max(0, top - margin);
+        left = Math.max(0, left - margin);
+        bottom = Math.min(height - 1, bottom + margin);
+        right = Math.min(width - 1, right + margin);
+
+        return {
+            x: x + left,
+            y: y + top,
+            width: right - left + 1,
+            height: bottom - top + 1
+        };
+    }
+
+    /**
+     * Metodo fallback: split immagine in 2 parti uguali verticalmente
+     */
+    splitImageInHalf(image) {
+        const documents = [];
+        const halfHeight = Math.floor(image.height / 2);
+
+        console.log('Split in 2 parti uguali (orizzontale)');
+
+        for (let i = 0; i < 2; i++) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            canvas.width = image.width;
+            canvas.height = halfHeight;
+
+            const sy = i * halfHeight;
+            ctx.drawImage(image, 0, sy, image.width, halfHeight, 0, 0, image.width, halfHeight);
+
+            documents.push({
+                id: `doc_${Date.now()}_${i}`,
+                canvas: canvas,
+                bounds: {x: 0, y: sy, width: image.width, height: halfHeight},
+                originalImage: image
+            });
+        }
+
+        return documents;
     }
 }
-
-// Export per uso in altri moduli
-window.DocumentDetector = DocumentDetector;

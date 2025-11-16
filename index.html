@@ -3,49 +3,138 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ID Card Processor - Rilevamento e Rotazione Automatica</title>
-    <link rel="stylesheet" href="css/style.css">
+    <title>ID Cards Composer - Componi Documenti di Identità</title>
+    <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
     <div class="container">
+        <!-- Header -->
         <header>
-            <h1>🪪 ID Card Processor</h1>
-            <p>Rileva, raddrizza e ottimizza automaticamente le tue carte d'identità</p>
+            <h1>📄 ID Cards Composer</h1>
+            <p>Carica, croppa e componi documenti di identità su formato A4</p>
         </header>
 
-        <main>
-            <!-- Drop Zone -->
-            <div id="dropZone" class="drop-zone">
-                <div class="drop-zone-content">
-                    <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="17 8 12 3 7 8"></polyline>
-                        <line x1="12" y1="3" x2="12" y2="15"></line>
-                    </svg>
-                    <h2>Trascina qui le tue immagini</h2>
-                    <p>oppure clicca per selezionarle</p>
-                    <p class="supported-formats">Supporta: JPG, PNG, WebP</p>
-                </div>
-                <input type="file" id="fileInput" accept="image/*" multiple style="display: none;">
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left Panel: Upload & Detected Documents -->
+            <div class="left-panel">
+                <!-- Upload Area -->
+                <section class="upload-section">
+                    <h2>1. Carica Documenti</h2>
+                    <div class="drop-zone" id="dropZone">
+                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <p>Trascina qui i file oppure clicca per selezionare</p>
+                        <p class="file-types">PNG, JPG, PDF</p>
+                        <input type="file" id="fileInput" accept="image/png,image/jpeg,application/pdf" multiple hidden>
+                    </div>
+                </section>
+
+                <!-- Detected Documents -->
+                <section class="documents-section">
+                    <h2>2. Documenti Rilevati</h2>
+                    <div class="documents-grid" id="documentsGrid">
+                        <p class="placeholder">Nessun documento caricato</p>
+                    </div>
+                </section>
+
+                <!-- Quick Layout Templates -->
+                <section class="templates-section">
+                    <h2>Layout Rapidi</h2>
+                    <div class="template-buttons">
+                        <button class="btn-template" id="btnLayoutVertical" title="Fronte sopra, retro sotto">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <rect x="4" y="3" width="16" height="8" rx="1"></rect>
+                                <rect x="4" y="13" width="16" height="8" rx="1"></rect>
+                            </svg>
+                            Verticale
+                        </button>
+                        <button class="btn-template" id="btnLayoutHorizontal" title="Fronte e retro affiancati">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <rect x="2" y="6" width="9" height="12" rx="1"></rect>
+                                <rect x="13" y="6" width="9" height="12" rx="1"></rect>
+                            </svg>
+                            Orizzontale
+                        </button>
+                        <button class="btn-template" id="btnClearCanvas" title="Pulisci canvas">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                            Pulisci
+                        </button>
+                    </div>
+                </section>
             </div>
 
-            <!-- Processing Status -->
-            <div id="processingStatus" class="processing-status" style="display: none;">
-                <div class="spinner"></div>
-                <p id="statusText">Processando immagini...</p>
+            <!-- Right Panel: A4 Canvas -->
+            <div class="right-panel">
+                <section class="canvas-section">
+                    <div class="canvas-header">
+                        <h2>3. Componi su A4</h2>
+                        <div class="canvas-controls">
+                            <label>
+                                Zoom:
+                                <input type="range" id="zoomSlider" min="0.3" max="1.5" step="0.1" value="1">
+                                <span id="zoomValue">100%</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="canvas-container" id="canvasContainer">
+                        <div class="canvas-wrapper" id="canvasWrapper">
+                            <canvas id="a4Canvas"></canvas>
+                            <div class="canvas-guide">Trascina qui i documenti dal pannello sinistro</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Export Section -->
+                <section class="export-section">
+                    <h2>4. Esporta</h2>
+                    <div class="export-controls">
+                        <div class="export-format">
+                            <label>
+                                <input type="radio" name="exportFormat" value="pdf" checked>
+                                <span>PDF</span>
+                            </label>
+                            <label>
+                                <input type="radio" name="exportFormat" value="png">
+                                <span>PNG</span>
+                            </label>
+                            <label>
+                                <input type="radio" name="exportFormat" value="jpg">
+                                <span>JPG</span>
+                            </label>
+                        </div>
+                        <button class="btn-export" id="btnExport">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Scarica Documento
+                        </button>
+                    </div>
+                </section>
             </div>
-
-            <!-- Results Grid -->
-            <div id="results" class="results-grid"></div>
-        </main>
-
-        <footer>
-            <p>Apri la Console (F12) per vedere i dettagli del processo</p>
-        </footer>
+        </div>
     </div>
 
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <p>Elaborazione in corso...</p>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="js/documentDetector.js"></script>
     <script src="js/imageProcessor.js"></script>
+    <script src="js/canvasManager.js"></script>
+    <script src="js/exporter.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>
